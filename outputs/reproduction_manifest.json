@@ -1,0 +1,29 @@
+{
+  "paper": {
+    "alpha": 0.48,
+    "alpha_cvar_rn": 0.24,
+    "alpha_evar_reported_in_figure_caption": 0.03,
+    "alpha_evar_note": "Figure caption reports 0.03; Section III.B with kappa=2 gives the value below.",
+    "alpha_evar_from_section_3b_kappa_2": 0.1132649175218032,
+    "grid": [
+      64,
+      53
+    ],
+    "obstacles": 80
+  },
+  "implementation": {
+    "gamma_assumption": 0.95,
+    "confidence_points": 21,
+    "theta_assumption": 2.067,
+    "collision_terminates_assumption": true,
+    "wall_collision_stays_assumption": true,
+    "ncvar_perspective_extension": "risk_neutral",
+    "ncvar_risk_state_projection": "min(y, 1)",
+    "kl_kappa": 2.0,
+    "figure_1c_calibrated_kl_radius": 0.03,
+    "diagnostic_kl_radius_from_section_3b": 2.1780258012467533,
+    "kl_radius_formula": "-ln(alpha) + (1/alpha) * ln(kappa)",
+    "decision_kappa_source": "normalized local expected collision cost; not published by paper",
+    "monte_carlo_episodes": 5000
+  }
+}

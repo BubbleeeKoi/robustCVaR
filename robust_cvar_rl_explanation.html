@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robust CVaR Risk-Sensitive RL 论文详细讲解</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #1d4ed8;
+      --primary-soft: #e0ecff;
+      --border: #d8dee9;
+      --code-bg: #f3f4f6;
+      --warn-bg: #fff7ed;
+      --warn-border: #fdba74;
+      --green-bg: #ecfdf5;
+      --green-border: #6ee7b7;
+      --red-bg: #fef2f2;
+      --red-border: #fca5a5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      font-size: 16px;
+    }
+    header {
+      background: linear-gradient(135deg, #1d4ed8, #0f172a);
+      color: white;
+      padding: 42px 24px;
+    }
+    header .wrap { max-width: 1120px; margin: 0 auto; }
+    h1 { font-size: 34px; line-height: 1.25; margin: 0 0 12px; }
+    header p { margin: 6px 0; color: #dbeafe; }
+    main { max-width: 1120px; margin: 28px auto; padding: 0 20px 80px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 26px 30px;
+      margin: 22px 0;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+    h2 {
+      font-size: 25px;
+      margin: 0 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--primary-soft);
+      color: #111827;
+    }
+    h3 {
+      font-size: 20px;
+      margin: 26px 0 10px;
+      color: #111827;
+    }
+    h4 { font-size: 18px; margin: 20px 0 8px; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .toc {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 28px;
+      margin: 24px 0;
+    }
+    .toc ol { columns: 2; padding-left: 24px; }
+    .toc li { margin: 5px 0; break-inside: avoid; }
+    .note, .warn, .example, .formula-note {
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .note { background: var(--primary-soft); border: 1px solid #93c5fd; }
+    .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); }
+    .example { background: var(--green-bg); border: 1px solid var(--green-border); }
+    .formula-note { background: var(--code-bg); border: 1px solid #d1d5db; }
+    .bad { background: var(--red-bg); border: 1px solid var(--red-border); }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; }
+    th { background: #f3f6fb; text-align: left; }
+    code, pre { background: var(--code-bg); border-radius: 6px; }
+    code { padding: 2px 5px; }
+    pre { padding: 14px; overflow-x: auto; }
+    .linkbox ul { margin-top: 8px; }
+    .small { color: var(--muted); font-size: 14px; }
+    .tag { display: inline-block; font-size: 13px; padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: #1e40af; margin-right: 6px; }
+    .flow { display: flex; gap: 12px; flex-wrap: wrap; margin: 14px 0; }
+    .flow span { background: #eef2ff; border: 1px solid #c7d2fe; padding: 8px 12px; border-radius: 10px; }
+    .arrow { color: #64748b; padding: 8px 0; }
+    footer { color: var(--muted); font-size: 14px; margin-top: 30px; }
+    @media (max-width: 760px) {
+      .toc ol { columns: 1; }
+      section { padding: 20px; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>《Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk》详细讲解</h1>
+    <p>关键词：Robust MDP、CVaR、Risk-Sensitive RL、Ambiguity Set、NCVaR、Bellman Value Iteration</p>
+    <p>说明：本文档按照论文结构和你前面要求的 1–10 部分展开，并把第 14 部分之后重新讲细。</p>
+  </div>
+</header>
+<main>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#sec1">这篇文章的核心问题是什么？</a></li>
+    <li><a href="#sec2">MDP 和 RMDP 的区别</a></li>
+    <li><a href="#sec3">文章中的不确定集怎么定义？</a></li>
+    <li><a href="#sec4">CVaR 是什么？</a></li>
+    <li><a href="#sec5">CVaR 的对偶表示为什么重要？</a></li>
+    <li><a href="#sec6">第一个核心模型：Robust CVaR</a></li>
+    <li><a href="#sec7">为什么公式里有 \(\tilde P\)，后面又没了？</a></li>
+    <li><a href="#sec8">固定不确定预算：RN derivative 情况</a></li>
+    <li><a href="#sec9">固定不确定预算：KL divergence 情况</a></li>
+    <li><a href="#sec10">前十部分核心结论</a></li>
+    <li><a href="#sec11">Decision-dependent uncertainty</a></li>
+    <li><a href="#sec12">NCVaR 是什么？</a></li>
+    <li><a href="#sec13">NCVaR 与 Robust CVaR 的等价关系</a></li>
+    <li><a href="#sec14">为什么需要 NCVaR 分解？</a></li>
+    <li><a href="#sec15">分解定理到底在说什么？</a></li>
+    <li><a href="#sec16">\(\xi\) 是什么？</a></li>
+    <li><a href="#sec17">为什么下一步风险水平变成 \(y\xi\)？</a></li>
+    <li><a href="#sec18">为什么要引入 \(V(x,y)\)？</a></li>
+    <li><a href="#sec19">NCVaR Bellman 算子逐项解释</a></li>
+    <li><a href="#sec20">Lemma 1 与 Theorem 2</a></li>
+    <li><a href="#sec21">Algorithm 1 与 Algorithm 2</a></li>
+    <li><a href="#sec22">实验部分与图 1</a></li>
+    <li><a href="#sec23">对金融问题的启发</a></li>
+    <li><a href="#links">需要加链接的地方</a></li>
+  </ol>
+</div>
+
+<section id="sec1">
+  <h2>1. 这篇文章的核心问题是什么？</h2>
+  <p>文章题目是：</p>
+  <div class="formula-note">$$\text{Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk}$$</div>
+  <p>这个题目可以拆成三个关键词：</p>
+  <div class="flow">
+    <span>Robust</span><span class="arrow">+</span><span>Risk-Sensitive RL</span><span class="arrow">+</span><span>CVaR</span>
+  </div>
+  <p>也就是：<strong>在强化学习中，既考虑模型不确定性，又考虑尾部风险。</strong></p>
+  <p>普通强化学习一般优化的是期望累计回报，或者在成本最小化问题中优化期望累计成本：</p>
+  <div class="formula-note">$$\min_\pi \mathbb E\left[\sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)\right].$$</div>
+  <p>这里的目标只关心“平均表现”。如果一个策略在大多数情况下表现不错，但在少数极端情况下损失巨大，普通期望目标可能仍然认为它是好策略。</p>
+  <div class="example">
+    <strong>金融直观例子：</strong>一个投资策略平时每天小赚，但在极端市场中会出现巨大回撤。普通期望收益可能很好看，但是这个策略的尾部风险很大。
+  </div>
+  <p>所以风险敏感强化学习会把目标从期望换成风险度量，例如 CVaR：</p>
+  <div class="formula-note">$$\min_\pi CVaR_\alpha\left(\sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)\right).$$</div>
+  <p>这里 \(CVaR_\alpha\) 衡量的是尾部坏结果的平均损失。文章指出，CVaR 已经广泛用于 risk-sensitive RL，但它在 Robust MDP 框架下到底如何表现，还没有被系统研究。</p>
+  <p>因此，本文的核心不是单纯做 CVaR-RL，而是研究：</p>
+  <div class="formula-note">$$\boxed{\text{转移概率不确定时，如何最小化最坏模型下的 CVaR 风险？}}$$</div>
+</section>
+
+<section id="sec2">
+  <h2>2. MDP 和 RMDP 的区别</h2>
+  <p>文章首先定义普通 MDP：</p>
+  <div class="formula-note">$$(\mathcal X,\mathcal A,C,P,\gamma,x_0).$$</div>
+  <table>
+    <tr><th>符号</th><th>含义</th></tr>
+    <tr><td>\(\mathcal X\)</td><td>状态空间，例如市场状态、网格位置、库存水平等。</td></tr>
+    <tr><td>\(\mathcal A\)</td><td>动作空间，例如买入、卖出、持有，或者向东南西北移动。</td></tr>
+    <tr><td>\(C(x,a)\)</td><td>在状态 \(x\) 采取动作 \(a\) 的成本。本文是成本最小化框架，不是收益最大化框架。</td></tr>
+    <tr><td>\(P(\cdot|x,a)\)</td><td>转移概率。采取动作 \(a\) 后，从状态 \(x\) 到下一个状态 \(x'\) 的概率。</td></tr>
+    <tr><td>\(\gamma\)</td><td>折扣因子，越接近 1 越重视长期成本。</td></tr>
+    <tr><td>\(x_0\)</td><td>初始状态。</td></tr>
+  </table>
+  <p>普通 MDP 的关键假设是：转移概率 \(P\) 是已知的、固定的。</p>
+  <p>但是现实中，\(P\) 往往只是估计出来的。金融中特别明显，例如：</p>
+  <div class="formula-note">$$P(\text{明天市场上涨}\mid \text{今天市场状态},\text{当前仓位})$$</div>
+  <p>这个概率不可能精确知道，只能用历史数据估计。而历史估计会有误差，市场机制也会变化。</p>
+  <p>因此 Robust MDP 不再认为转移概率只有一个确定的 \(P\)，而是认为真实转移概率属于一个不确定集合：</p>
+  <div class="formula-note">$$\tilde P\in\mathcal P.$$</div>
+  <p>这里：</p>
+  <ul>
+    <li>\(P\)：基准转移模型，通常来自估计或经验模型；</li>
+    <li>\(\tilde P\)：可能的真实转移模型；</li>
+    <li>\(\mathcal P\)：ambiguity set，也就是允许的转移概率扰动范围。</li>
+  </ul>
+  <div class="note">
+    <strong>普通 MDP：</strong>我相信模型 \(P\) 是对的。<br />
+    <strong>Robust MDP：</strong>我不完全相信模型 \(P\)，真实模型可能是 \(\mathcal P\) 里的任何一个 \(\tilde P\)。
+  </div>
+  <p>文章使用的是 rectangular ambiguity set，也就是每个状态-动作对 \((x,a)\) 的不确定性可以分开处理。文章也说明，非 rectangular ambiguity set 的 robust policy evaluation 即使在固定策略下也可能是 NP-hard，因此文献中通常采用 rectangular ambiguity set 来保证计算可行。</p>
+</section>
+
+<section id="sec3">
+  <h2>3. 文章中的不确定集怎么定义？</h2>
+  <p>文章考虑的 ambiguity set 是：</p>
+  <div class="formula-note">
+    $$\mathcal P
+    =
+    \left\{
+    \tilde P:
+    \sum_{x'\in\mathcal X}\tilde P(x'|x,a)=1,
+    \quad
+    D(\tilde P,P)\le K
+    \right\}.$$
+  </div>
+  <p>这个集合有两个约束。</p>
+  <h3>第一个约束：概率必须归一化</h3>
+  <div class="formula-note">$$\sum_{x'\in\mathcal X}\tilde P(x'|x,a)=1.$$</div>
+  <p>这只是说明 \(\tilde P(\cdot|x,a)\) 必须仍然是一个概率分布。</p>
+  <h3>第二个约束：偏离不能超过预算 \(K\)</h3>
+  <div class="formula-note">$$D(\tilde P,P)\le K.$$</div>
+  <p>这里 \(K\) 是不确定预算。它表示真实转移概率 \(\tilde P\) 允许偏离基准模型 \(P\) 的程度。</p>
+  <ul>
+    <li>如果 \(K=0\)，说明 \(\tilde P=P\)，没有模型不确定性。</li>
+    <li>如果 \(K\) 越大，说明真实模型可以偏离基准模型越多，robust 问题越保守。</li>
+  </ul>
+  <p>文章中的 divergence 写为：</p>
+  <div class="formula-note">
+    $$D(\tilde P,P)
+    =
+    \sum_{x'\in\mathcal X}
+    P(x'|x,a)
+    \phi
+    \left(
+    \frac{\tilde P(x'|x,a)}{P(x'|x,a)}
+    \right)
+    \le K.$$
+  </div>
+  <p>其中 \(\phi\) 是凸函数，并且满足：</p>
+  <div class="formula-note">$$\phi(1)=0.$$</div>
+  <p>这就是所谓的 \(\phi\)-divergence。</p>
+  <h3>这个比例项怎么理解？</h3>
+  <p>公式里最重要的项是：</p>
+  <div class="formula-note">$$\frac{\tilde P(x'|x,a)}{P(x'|x,a)}.$$</div>
+  <p>它表示真实转移概率相对于基准转移概率的放大倍数。</p>
+  <ul>
+    <li>如果这个比例等于 1，说明真实模型和基准模型一致。</li>
+    <li>如果这个比例大于 1，说明这个转移结果在真实环境中更容易发生。</li>
+    <li>如果这个比例小于 1，说明这个转移结果在真实环境中更不容易发生。</li>
+  </ul>
+  <div class="example">
+    <strong>金融例子：</strong>基准模型认为“市场从低波动转向高波动”的概率是 5%，但真实情况下可能是 10%。那么这个转移的比例就是 \(10\%/5\%=2\)，说明真实风险状态发生概率是模型估计的 2 倍。
+  </div>
+</section>
+
+<section id="sec4">
+  <h2>4. CVaR 是什么？</h2>
+  <p>文章定义 CVaR 为：</p>
+  <div class="formula-note">
+    $$CVaR_\alpha(Z)
+    =
+    \inf_{t\in\mathbb R}
+    \left\{
+    t+
+    \frac{1}{\alpha}
+    \mathbb E_P[(Z-t)^+]
+    \right\}.$$
+  </div>
+  <p>其中：</p>
+  <div class="formula-note">$$(z)^+=\max(z,0).$$</div>
+  <p>这里 \(Z\) 是随机变量。在本文中，\(Z\) 通常代表累计折扣成本：</p>
+  <div class="formula-note">$$Z=\sum_{t=0}^{\infty}\gamma^t C(x_t,a_t).$$</div>
+  <p>\(\alpha\in(0,1]\) 是风险水平。注意本文使用的是成本最小化，因此 \(\alpha\) 越小，表示越关注极端高成本部分，也就越保守。</p>
+  <h3>CVaR 的直观含义</h3>
+  <p>如果 \(Z\) 是损失，那么：</p>
+  <div class="formula-note">$$CVaR_\alpha(Z)$$</div>
+  <p>可以理解为：在最坏的 \(\alpha\) 比例情形下，损失的平均值。</p>
+  <p>例如：</p>
+  <ul>
+    <li>\(\alpha=0.1\)：关注最差 10% 情况下的平均损失；</li>
+    <li>\(\alpha=0.05\)：关注最差 5% 情况下的平均损失；</li>
+    <li>\(\alpha\) 越小，越关注更极端的尾部。</li>
+  </ul>
+  <div class="example">
+    <strong>金融例子：</strong>如果 \(Z\) 是组合损失，那么 \(CVaR_{0.05}(Z)\) 表示最糟糕 5% 市场情形下的平均亏损。它比 VaR 更稳定，因为 VaR 只看一个分位点，而 CVaR 看尾部平均损失。
+  </div>
+</section>
+
+<section id="sec5">
+  <h2>5. CVaR 的对偶表示为什么重要？</h2>
+  <p>文章使用了 CVaR 的对偶表示：</p>
+  <div class="formula-note">
+    $$CVaR_\alpha(Z)
+    =
+    \sup_{Q\in\mathcal U_{CVaR}}
+    \mathbb E_Q[Z],$$
+  </div>
+  <p>其中：</p>
+  <div class="formula-note">
+    $$\mathcal U_{CVaR}
+    =
+    \left\{
+    Q\ll P:
+    0\le
+    \frac{Q(\omega)}{P(\omega)}
+    \le
+    \frac{1}{\alpha}
+    \right\}.$$
+  </div>
+  <p>这个公式是全文的关键。它说明：<strong>CVaR 可以看成是在一组被扭曲的概率分布下取最坏期望。</strong></p>
+  <h3>普通期望 vs CVaR 对偶形式</h3>
+  <table>
+    <tr><th>目标</th><th>形式</th><th>含义</th></tr>
+    <tr><td>普通期望</td><td>\(\mathbb E_P[Z]\)</td><td>只在原始概率 \(P\) 下取平均。</td></tr>
+    <tr><td>CVaR</td><td>\(\sup_Q\mathbb E_Q[Z]\)</td><td>允许把概率质量更多地放到坏结果上，然后取最坏期望。</td></tr>
+  </table>
+  <p>约束：</p>
+  <div class="formula-note">$$0\le \frac{Q(\omega)}{P(\omega)}\le \frac{1}{\alpha}$$</div>
+  <p>表示 \(Q\) 不能任意扭曲 \(P\)。它最多只能把某个事件的概率放大 \(1/\alpha\) 倍。</p>
+  <p>例如：</p>
+  <ul>
+    <li>如果 \(\alpha=0.1\)，最大放大倍数是 \(10\)；</li>
+    <li>如果 \(\alpha=0.05\)，最大放大倍数是 \(20\)。</li>
+  </ul>
+  <p>所以 \(\alpha\) 越小，CVaR 允许最坏分布 \(Q\) 越强烈地放大坏事件，因此策略越保守。</p>
+  <div class="note">
+    这就是为什么文章说 CVaR 本身就带有 robust 的味道。它不只是一个风险指标，也可以被理解成“在一组概率扰动下的最坏期望”。
+  </div>
+</section>
+
+<section id="sec6">
+  <h2>6. 文章的第一个核心模型：Robust CVaR</h2>
+  <p>文章定义的 robust CVaR 问题是：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{\tilde P\in\mathcal P}
+    CVaR_\alpha
+    \left(
+    \lim_{T\to\infty}
+    \sum_{t=0}^{T}
+    \gamma^t C(x_t,a_t)
+    \mid x_0,\pi
+    \right).
+    \tag{2}$$
+  </div>
+  <p>这个公式可以分三层理解。</p>
+  <h3>第一层：累计折扣成本</h3>
+  <div class="formula-note">$$\sum_{t=0}^{T}\gamma^t C(x_t,a_t).$$</div>
+  <p>它表示从初始状态出发，在策略 \(\pi\) 下，一条轨迹产生的总成本。</p>
+  <h3>第二层：CVaR 尾部风险</h3>
+  <div class="formula-note">$$CVaR_\alpha(\cdot).$$</div>
+  <p>这表示我们不看平均成本，而看最坏尾部情形下的平均成本。</p>
+  <h3>第三层：最坏转移模型</h3>
+  <div class="formula-note">$$\max_{\tilde P\in\mathcal P}.$$</div>
+  <p>这表示真实转移概率不一定是基准模型 \(P\)，而可能是 \(\mathcal P\) 里面最不利的一个模型 \(\tilde P\)。</p>
+  <p>所以这个目标不是：</p>
+  <div class="formula-note">$$\min_\pi \mathbb E[\text{cost}],$$</div>
+  <p>而是：</p>
+  <div class="formula-note">$$\min_\pi \text{最坏模型下的尾部风险成本}.$$</div>
+  <div class="note">
+    <strong>一句话：</strong>普通 RL 只问“平均成本低不低”；CVaR-RL 问“极端坏情况下成本高不高”；Robust CVaR-RL 进一步问“如果模型还错了，最坏模型下极端成本高不高”。
+  </div>
+</section>
+
+<section id="sec7">
+  <h2>7. 为什么公式里面有 \(\tilde P\)，后面又没了？</h2>
+  <p>这是理解文章的关键点。原始 robust CVaR 问题是：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{\tilde P\in\mathcal P}
+    CVaR_\alpha
+    \left(
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right).$$
+  </div>
+  <p>这里有 \(\tilde P\)，因为 CVaR 是在某个转移模型下计算的。不同的 \(\tilde P\) 会产生不同的轨迹分布，从而产生不同的累计成本分布。</p>
+  <p>然后利用 CVaR 的对偶表示：</p>
+  <div class="formula-note">$$CVaR_\alpha(Z)=\max_{Q\in\mathcal U_{CVaR}}\mathbb E_Q[Z].$$</div>
+  <p>于是原问题可以改写为：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{\tilde P\in\mathcal P}
+    \max_{Q\in\mathcal U_{CVaR}}
+    \mathbb E_Q
+    \left[
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right].
+    \tag{3}$$
+  </div>
+  <p>这时出现了两个“最坏”。</p>
+  <table>
+    <tr><th>最坏项</th><th>含义</th></tr>
+    <tr><td>\(\max_{\tilde P\in\mathcal P}\)</td><td>模型不确定性带来的最坏转移概率。</td></tr>
+    <tr><td>\(\max_{Q\in\mathcal U_{CVaR}}\)</td><td>CVaR 尾部风险对应的最坏概率扭曲。</td></tr>
+  </table>
+  <p>文章的关键操作是：把这两个最坏集合合并成一个新的不确定集合 \(\mathcal Q\)。于是得到：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{Q\in\mathcal Q}
+    \mathbb E_Q
+    \left[
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right].
+    \tag{4}$$
+  </div>
+  <p>所以，\(\tilde P\) 不是没有了，而是被合并进新的最坏分布集合 \(\mathcal Q\) 里面了。</p>
+  <div class="formula-note">
+    $$\tilde P\text{ 的模型不确定性}
+    +
+    CVaR\text{ 的概率扭曲}
+    \quad\Longrightarrow\quad
+    \text{新的最坏分布 }Q.$$
+  </div>
+  <div class="example">
+    <strong>直观理解：</strong>先是模型层面说“真实世界可能比估计模型更坏”，再是 CVaR 层面说“即使在这个真实世界里，也更关注坏结果”。这两个坏情况叠加之后，可以等价看成一个新的最坏概率分布 \(Q\)。
+  </div>
+</section>
+
+<section id="sec8">
+  <h2>8. 固定不确定预算下：RN derivative 情况</h2>
+  <p>文章首先考虑 Radon-Nikodym derivative 类型的不确定性：</p>
+  <div class="formula-note">
+    $$D_{RN}(\tilde P,P)
+    =
+    \frac{\tilde P(x'|x,a)}{P(x'|x,a)}
+    \in[0,K].$$
+  </div>
+  <p>这表示：</p>
+  <div class="formula-note">$$\tilde P(x'|x,a)\le K P(x'|x,a).$$</div>
+  <p>也就是说，真实转移概率相对于基准转移概率最多放大 \(K\) 倍。</p>
+  <p>另一方面，CVaR 的对偶约束是：</p>
+  <div class="formula-note">
+    $$\frac{Q(x'|x,a)}{\tilde P(x'|x,a)}\le\frac{1}{\alpha}.$$
+  </div>
+  <p>把两个比例相乘：</p>
+  <div class="formula-note">
+    $$\frac{Q(x'|x,a)}{P(x'|x,a)}
+    =
+    \frac{Q(x'|x,a)}{\tilde P(x'|x,a)}
+    \cdot
+    \frac{\tilde P(x'|x,a)}{P(x'|x,a)}
+    \le
+    \frac{1}{\alpha}\cdot K
+    =
+    \frac{K}{\alpha}.$$
+  </div>
+  <p>所以新的不确定集合变成：</p>
+  <div class="formula-note">
+    $$\mathcal U_{RN}
+    =
+    \left\{
+    Q\ll P:
+    D_{RN}(Q,P)\in
+    \left[0,\frac{K}{\alpha}\right]
+    \right\}.$$
+  </div>
+  <p>于是原问题变成：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{Q\in\mathcal U_{RN}}
+    \mathbb E_Q
+    \left[
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right].
+    \tag{5}$$
+  </div>
+  <p>文章进一步指出，这等价于一个新的 CVaR 问题，其置信水平变成：</p>
+  <div class="formula-note">$$\alpha'=\frac{\alpha}{K}.$$</div>
+  <p>也就是：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    CVaR_{\alpha'}
+    \left(
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right).$$
+  </div>
+  <div class="note">
+    <strong>核心理解：</strong>固定 RN 不确定性下的 Robust CVaR，本质上等价于一个更保守的 CVaR。
+  </div>
+  <p>如果 \(K>1\)，那么：</p>
+  <div class="formula-note">$$\alpha'=\frac{\alpha}{K}<\alpha.$$</div>
+  <p>\(\alpha'\) 更小，就表示关注更极端的尾部风险。</p>
+  <div class="example">
+    文章实验里使用 \(\alpha=0.48\)，\(K=2\)，所以：
+    $$\alpha'=\frac{0.48}{2}=0.24.$$
+    原来关注 48% 尾部，现在等价于关注 24% 尾部，因此策略更保守。
+  </div>
+</section>
+
+<section id="sec9">
+  <h2>9. 固定不确定预算下：KL divergence 情况</h2>
+  <p>文章第二个例子是 KL divergence：</p>
+  <div class="formula-note">
+    $$D_{KL}(\tilde P,P)
+    =
+    \sum_{x'\in\mathcal X}
+    \tilde P(x'|x,a)
+    \log
+    \frac{\tilde P(x'|x,a)}{P(x'|x,a)}
+    \le K.$$
+  </div>
+  <p>KL divergence 衡量的是两个概率分布之间的信息差异。它比 RN derivative 更平滑，不是简单限制每一个转移概率最多放大多少倍，而是限制整体分布偏离程度。</p>
+  <p>文章令：</p>
+  <div class="formula-note">$$K=\ln\kappa,\quad \kappa\ge 1.$$</div>
+  <p>然后把 CVaR 的风险包络集合和 KL 不确定集合合并，得到新的约束：</p>
+  <div class="formula-note">
+    $$D_{KL}(Q,P)
+    \le
+    -\ln\alpha
+    +
+    \frac{1}{\alpha}\ln\kappa.$$
+  </div>
+  <p>这个右边可以写成：</p>
+  <div class="formula-note">
+    $$-\ln\left(\frac{\alpha}{\kappa^{1/\alpha}}\right).$$
+  </div>
+  <p>于是问题变成：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    \max_{Q\in\mathcal U_{KL}}
+    \mathbb E_Q
+    \left[
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right].
+    \tag{6}$$
+  </div>
+  <p>文章指出，这等价于 EVaR 优化：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    EVaR_{\alpha'}
+    \left(
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right),$$
+  </div>
+  <p>其中：</p>
+  <div class="formula-note">$$\alpha'=\frac{\alpha}{\kappa^{1/\alpha}}.$$</div>
+  <div class="note">
+    <strong>核心理解：</strong>RN 不确定性会把 Robust CVaR 转成更保守的 CVaR；KL 不确定性会把 Robust CVaR 转成 EVaR。这是因为 EVaR 的对偶风险集合本身就是 KL divergence ball。
+  </div>
+</section>
+
+<section id="sec10">
+  <h2>10. 到这里为止，文章第一部分的核心结论</h2>
+  <p>对于固定 ambiguity set，也就是不确定预算 \(K\) 不随状态和动作变化时，文章得到：</p>
+  <table>
+    <tr><th>不确定集类型</th><th>Robust CVaR 等价形式</th><th>直观含义</th></tr>
+    <tr><td>RN derivative</td><td>更低置信水平的 CVaR：\(CVaR_{\alpha/K}\)</td><td>模型不确定性使 CVaR 更保守。</td></tr>
+    <tr><td>KL divergence</td><td>某个置信水平的 EVaR：\(EVaR_{\alpha/\kappa^{1/\alpha}}\)</td><td>KL 型稳健性自然对应 EVaR。</td></tr>
+  </table>
+  <p>也就是说，固定不确定预算下，作者不需要重新设计全新的 RL 算法，而是把 Robust CVaR 转成已有的 risk-sensitive RL 问题。</p>
+  <div class="formula-note">
+    $$\boxed{\text{固定 ambiguity set 下：Robust CVaR 可以转化为已有的 CVaR/EVaR RL 问题。}}$$
+  </div>
+  <p>这是文章 Section III 的主要贡献。</p>
+</section>
+
+<section id="sec11">
+  <h2>11. 第二个核心问题：Decision-dependent uncertainty</h2>
+  <p>前面讲的是固定不确定预算，也就是所有状态和动作使用同一个 \(K\)。</p>
+  <p>但是现实中，不同状态、不同动作的不确定性往往不同。例如金融中：</p>
+  <ul>
+    <li>正常市场中，转移概率估计可能比较可靠；</li>
+    <li>高波动市场中，转移概率估计更不可靠；</li>
+    <li>高杠杆动作会放大模型误差；</li>
+    <li>流动性差的资产或状态下，真实转移更难预测。</li>
+  </ul>
+  <p>所以文章进一步考虑 state-action-dependent ambiguity budget：</p>
+  <div class="formula-note">$$\bar\kappa(x,a).$$</div>
+  <p>文章写成：</p>
+  <div class="formula-note">
+    $$D_{RN}(\tilde P,P)
+    =
+    \frac{\tilde P(x'|x,a)}{P(x'|x,a)}
+    \in[0,\bar\kappa(x,a)],
+    \quad
+    \forall (x,a)\in\mathcal X\times\mathcal A.$$
+  </div>
+  <p>这里 \(\bar\kappa(x,a)\) 的含义是：在状态 \(x\) 下采取动作 \(a\) 时，转移概率允许偏离基准模型的程度。</p>
+  <p>结合 CVaR 对偶表示后：</p>
+  <div class="formula-note">
+    $$\frac{Q(x'|x,a)}{P(x'|x,a)}
+    \in
+    \left[
+    0,
+    \frac{\bar\kappa(x,a)}{\alpha}
+    \right].$$
+  </div>
+  <p>这时不能简单地写成一个固定置信水平的 \(CVaR_{\alpha'}\)，因为 \(\alpha'\) 不再是一个常数，而是会随着 \((x,a)\) 变化。</p>
+  <div class="warn">
+    <strong>关键困难：</strong>固定 \(K\) 时，我们可以写 \(\alpha'=\alpha/K\)。但现在 \(K\) 变成了 \(\bar\kappa(x,a)\)，不同状态动作有不同风险放大倍数，所以不能用一个统一的 \(\alpha'\) 表示整个问题。
+  </div>
+  <p>因此作者引入新的风险度量：\(NCVaR\)。</p>
+</section>
+
+<section id="sec12">
+  <h2>12. NCVaR 是什么？</h2>
+  <p>文章定义：</p>
+  <div class="formula-note">
+    $$NCVaR_{\alpha,\bar\kappa}(Z)
+    =
+    \sup_{Q\in\mathcal Q}
+    \mathbb E_Q[Z],
+    \tag{7}$$
+  </div>
+  <p>其中：</p>
+  <div class="formula-note">
+    $$\mathcal Q
+    =
+    \left\{
+    Q:
+    D_{RN}(Q,P)
+    =
+    \frac{Q(\omega)}{P(\omega)}
+    \in
+    \left[
+    0,
+    \frac{\bar\kappa(\omega)}{\alpha}
+    \right],
+    \forall \omega\in\Omega
+    \right\}.$$
+  </div>
+  <p>这个定义和 CVaR 非常像。</p>
+  <table>
+    <tr><th>风险度量</th><th>概率扭曲上限</th><th>含义</th></tr>
+    <tr><td>普通 CVaR</td><td>\(\frac{1}{\alpha}\)</td><td>所有样本使用同一个尾部概率放大上限。</td></tr>
+    <tr><td>NCVaR</td><td>\(\frac{\bar\kappa(\omega)}{\alpha}\)</td><td>不同样本、状态或动作可以有不同的概率放大上限。</td></tr>
+  </table>
+  <p>所以区别是：</p>
+  <div class="formula-note">
+    $$\frac{1}{\alpha}
+    \quad\Longrightarrow\quad
+    \frac{\bar\kappa(\omega)}{\alpha}.$$
+  </div>
+  <p>普通 CVaR 对所有坏事件的最大放大倍数是一样的；NCVaR 则允许某些更不可靠、更危险的状态动作组合有更大的放大倍数。</p>
+  <div class="example">
+    <strong>金融例子：</strong>如果当前市场是高波动状态，那么可以设置 \(\bar\kappa(x,a)\) 较大；如果当前市场很稳定，则设置 \(\bar\kappa(x,a)\) 接近 1。这样 NCVaR 会在高波动状态下自动更加保守。
+  </div>
+</section>
+
+<section id="sec13">
+  <h2>13. NCVaR 和 Robust CVaR 的等价关系</h2>
+  <p>在 decision-dependent RN uncertainty 下，原来的 robust CVaR 问题可以等价转化为：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    NCVaR_{\alpha,\bar\kappa}
+    \left(
+    \lim_{T\to\infty}
+    \sum_{t=0}^{T}
+    \gamma^t C(x_t,a_t)
+    \mid x_0,\pi
+    \right).
+    \tag{8}$$
+  </div>
+  <p>这句话的含义是：</p>
+  <div class="formula-note">
+    $$Robust\ CVaR\ under\ decision\text{-}dependent\ uncertainty
+    \quad\Longleftrightarrow\quad
+    NCVaR\ optimization.$$
+  </div>
+  <p>也就是说，NCVaR 并不是凭空引入的一个新名字。它是为了描述“CVaR 的尾部风险 + 状态动作相关的模型不确定性”合并之后的风险度量。</p>
+</section>
+
+<section id="sec14">
+  <h2>14. 为什么需要 NCVaR 分解？</h2>
+  <p>现在问题变成了：</p>
+  <div class="formula-note">
+    $$\min_{\pi\in\Pi_H}
+    NCVaR_{\alpha,\bar\kappa}
+    \left(
+    \sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)
+    \right).$$
+  </div>
+  <p>表面上看，这只是把 CVaR 换成了 NCVaR。但真正计算时会遇到很大困难。</p>
+  <h3>困难在哪里？</h3>
+  <p>因为：</p>
+  <div class="formula-note">$$Z=\sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)$$</div>
+  <p>不是一步成本，而是整条轨迹的累计成本。要直接算 \(NCVaR_{\alpha,\bar\kappa}(Z)\)，你需要知道这个总成本 \(Z\) 的完整概率分布。</p>
+  <p>这在强化学习中通常很难，因为：</p>
+  <ul>
+    <li>轨迹长度可能无限；</li>
+    <li>每一步状态转移都有随机性；</li>
+    <li>不同策略会产生不同的轨迹分布；</li>
+    <li>如果状态空间很大，完整枚举所有轨迹几乎不可能。</li>
+  </ul>
+  <div class="warn">
+    <strong>所以直接计算 NCVaR 的问题是：</strong>它需要整条轨迹累计成本的分布，而动态规划希望把问题拆成“一步成本 + 下一步价值”。
+  </div>
+  <p>因此作者需要一个分解定理，把整体风险：</p>
+  <div class="formula-note">$$NCVaR(\text{从现在到未来的总成本})$$</div>
+  <p>拆成：</p>
+  <div class="formula-note">$$\text{当前一步成本} + \text{下一步状态上的 NCVaR 价值}.$$</div>
+  <p>这就是 NCVaR decomposition theorem 的作用。</p>
+</section>
+
+<section id="sec15">
+  <h2>15. NCVaR 分解定理到底在说什么？</h2>
+  <p>文章 Theorem 1 给出了 NCVaR 的分解：</p>
+  <div class="formula-note">
+    $$NCVaR_{\alpha,\bar\kappa}(Z|H_t,\pi)
+    =
+    \max_{\xi\in\mathcal U_{NCVaR}}
+    \mathbb E_P
+    \left[
+    \xi_{x_{t+1}}
+    \cdot
+    NCVaR_{\alpha\xi,\bar\kappa}
+    (Z|H_{t+1},\pi)
+    \mid H_t,\pi
+    \right].$$
+  </div>
+  <p>先不要被公式吓到。它其实是在说一件动态规划里的事情：</p>
+  <div class="note">
+    当前的最坏尾部风险，可以通过“先选择一个最坏概率扭曲 \(\xi\)，然后看下一步状态的风险价值”来递归计算。
+  </div>
+  <p>这里有几个关键对象。</p>
+  <table>
+    <tr><th>符号</th><th>含义</th></tr>
+    <tr><td>\(H_t\)</td><td>到时间 \(t\) 为止的历史，包括过去状态和动作。</td></tr>
+    <tr><td>\(Z\)</td><td>从当前开始到未来的累计折扣成本。</td></tr>
+    <tr><td>\(\xi(x_{t+1})\)</td><td>对下一步状态概率的扭曲因子。</td></tr>
+    <tr><td>\(NCVaR_{\alpha\xi,\bar\kappa}(Z|H_{t+1},\pi)\)</td><td>到达下一步历史后，在新的风险水平下继续计算未来风险。</td></tr>
+  </table>
+  <h3>这和普通 Bellman 分解有什么区别？</h3>
+  <p>普通期望型 Bellman 分解是：</p>
+  <div class="formula-note">
+    $$V(x)=\min_a\left[C(x,a)+\gamma\sum_{x'}P(x'|x,a)V(x')\right].$$
+  </div>
+  <p>它只是在原始概率 \(P\) 下对下一步状态求平均。</p>
+  <p>NCVaR 的分解不同，它不是简单求平均，而是：</p>
+  <ul>
+    <li>先允许概率被 \(\xi\) 扭曲；</li>
+    <li>在所有合法 \(\xi\) 中选择最坏的一个；</li>
+    <li>并且下一步风险水平也会随 \(\xi\) 改变。</li>
+  </ul>
+</section>
+
+<section id="sec16">
+  <h2>16. \(\xi\) 是什么？</h2>
+  <p>\(\xi\) 是这篇文章后半部分最容易让人困惑的符号。它不是策略，也不是状态，也不是成本。</p>
+  <div class="formula-note">
+    $$\xi(x_{t+1})
+    =
+    \frac{Q(x_{t+1}|x_t,a_t)}{P(x_{t+1}|x_t,a_t)}.$$
+  </div>
+  <p>所以 \(\xi\) 是：</p>
+  <div class="formula-note">$$\boxed{\text{最坏分布 }Q\text{ 相对于基准分布 }P\text{ 的概率放大倍数。}}$$</div>
+  <p>如果：</p>
+  <ul>
+    <li>\(\xi(x')=1\)，说明这个下一状态的概率没有被改变；</li>
+    <li>\(\xi(x')>1\)，说明最坏分布把这个下一状态的概率放大了；</li>
+    <li>\(\xi(x')<1\)，说明最坏分布把这个下一状态的概率缩小了。</li>
+  </ul>
+  <p>但是 \(\xi\) 不能随便取，它必须满足两个条件。</p>
+  <h3>条件 1：每个状态的放大倍数不能超过上限</h3>
+  <div class="formula-note">
+    $$0\le \xi(x_{t+1})\le \frac{\bar\kappa(x_t,a_t)}{\alpha}.$$
+  </div>
+  <p>这个上限来自 NCVaR 的定义。\(\bar\kappa(x_t,a_t)\) 越大，说明这个状态动作下模型越不可靠，最坏分布可以更大幅度放大坏状态概率。</p>
+  <h3>条件 2：扭曲后的概率仍然要归一化</h3>
+  <div class="formula-note">
+    $$\sum_{x_{t+1}\in\mathcal X}
+    \xi(x_{t+1})P(x_{t+1}|x_t,a_t)=1.$$
+  </div>
+  <p>因为 \(\xi(x')P(x'|x,a)\) 就是新的概率 \(Q(x'|x,a)\)，所有下一状态的概率加起来必须等于 1。</p>
+  <div class="example">
+    <strong>简单例子：</strong>假设下一步只有两个状态，好状态和坏状态，基准概率分别是 0.8 和 0.2。最坏分布可能会把坏状态概率从 0.2 放大到 0.4，同时把好状态概率从 0.8 降到 0.6。此时坏状态的 \(\xi=0.4/0.2=2\)，好状态的 \(\xi=0.6/0.8=0.75\)。
+  </div>
+</section>
+
+<section id="sec17">
+  <h2>17. 为什么下一步风险水平会变成 \(y\xi\)？</h2>
+  <p>这一点是 CVaR/NCVaR 动态规划里最重要、也最不直观的地方。</p>
+  <p>在普通 Bellman 方程里，下一步 value function 是：</p>
+  <div class="formula-note">$$V(x').$$</div>
+  <p>但在 CVaR 或 NCVaR 中，value function 不仅要知道状态，还要知道当前处于哪个风险水平。因此下一步写成：</p>
+  <div class="formula-note">$$V(x',y\xi(x')).$$</div>
+  <p>为什么是 \(y\xi(x')\)？</p>
+  <h3>直观解释</h3>
+  <p>CVaR 的风险水平 \(y\) 可以理解为“还剩下多少尾部概率预算”。当最坏分布在某个下一状态 \(x'\) 上把概率放大了 \(\xi(x')\) 倍时，这个状态在尾部风险中的权重被改变了。</p>
+  <p>如果某个下一状态被最坏分布重点放大，那么到达这个状态后，后续风险计算就要使用调整后的风险水平：</p>
+  <div class="formula-note">$$y\quad\Longrightarrow\quad y\xi(x').$$</div>
+  <p>这不是作者随便写的，而是来自 coherent risk measure 的时间分解性质。它保证整体 NCVaR 可以被递归地拆成每一步的风险计算。</p>
+  <div class="example">
+    <strong>简单理解：</strong>假设当前关注最坏 10% 情况，\(y=0.1\)。如果下一状态 \(x'\) 在最坏分布下被放大了 \(\xi=2\) 倍，那么进入这个状态后，对后续风险的关注水平就变成 \(0.1\times2=0.2\)。这表示“这条分支在尾部风险预算中占的权重变了”。
+  </div>
+  <div class="warn">
+    这里的 \(y\xi\) 不是说风险一定变大或变小，而是说在递归计算中，下一状态对应的条件风险水平需要根据概率扭曲因子重新缩放。
+  </div>
+</section>
+
+<section id="sec18">
+  <h2>18. 为什么要引入 \(V(x,y)\)？</h2>
+  <p>普通 value function 是：</p>
+  <div class="formula-note">$$V(x).$$</div>
+  <p>它只依赖当前状态，因为普通期望型问题中，风险水平不会变化。</p>
+  <p>但是在 NCVaR 分解中，下一步风险水平会变成：</p>
+  <div class="formula-note">$$y\xi(x').$$</div>
+  <p>所以 value function 必须知道两个信息：</p>
+  <ul>
+    <li>当前状态是什么：\(x\)；</li>
+    <li>当前风险水平是多少：\(y\)。</li>
+  </ul>
+  <p>因此作者定义扩展状态空间：</p>
+  <div class="formula-note">$$\mathcal X\times\mathcal Y,$$</div>
+  <p>其中：</p>
+  <div class="formula-note">$$\mathcal Y=(0,1].$$</div>
+  <p>对应 value function 是：</p>
+  <div class="formula-note">
+    $$V(x,y)
+    =
+    \min_{\pi\in\Pi_H}
+    NCVaR_{y,\bar\kappa}
+    \left(
+    \lim_{T\to\infty}
+    \sum_{t=0}^{T}\gamma^t C(x_t,a_t)
+    \mid x_0=x,\pi
+    \right).$$
+  </div>
+  <p>这里 \(y\) 不是物理状态，而是风险状态。</p>
+  <div class="note">
+    <strong>所以：</strong>这篇文章的动态规划不是在 \(x\) 上做，而是在 \((x,y)\) 上做。这个 \(y\) 是为了记录递归过程中不断变化的风险置信水平。
+  </div>
+</section>
+
+<section id="sec19">
+  <h2>19. NCVaR Bellman 算子逐项解释</h2>
+  <p>文章定义 Bellman operator：</p>
+  <div class="formula-note">
+    $$T[V](x,y)
+    =
+    \min_{a\in A}
+    \left[
+    C(x,a)
+    +
+    \gamma
+    \max_{\xi\in\mathcal U_{NCVaR}(y,\bar\kappa(x,a),P(\cdot|x,a))}
+    \sum_{x'\in\mathcal X}
+    \xi(x')
+    V(x',y\xi(x'))
+    P(x'|x,a)
+    \right].$$
+  </div>
+  <p>可以从外到内拆开看。</p>
+  <h3>第一层：智能体选动作</h3>
+  <div class="formula-note">$$\min_{a\in A}.$$</div>
+  <p>智能体选择一个动作，让当前成本加未来风险最小。</p>
+  <h3>第二层：当前一步成本</h3>
+  <div class="formula-note">$$C(x,a).$$</div>
+  <p>这是在当前状态 \(x\) 采取动作 \(a\) 立即产生的成本。</p>
+  <h3>第三层：折扣未来成本</h3>
+  <div class="formula-note">$$\gamma(\cdots).$$</div>
+  <p>未来成本需要乘以折扣因子 \(\gamma\)。</p>
+  <h3>第四层：最坏概率扭曲</h3>
+  <div class="formula-note">$$\max_{\xi\in\mathcal U_{NCVaR}}.$$</div>
+  <p>这里表示自然环境或者 adversary 会选择最坏的概率扭曲，使未来风险最大。</p>
+  <h3>第五层：扭曲后的下一状态期望</h3>
+  <div class="formula-note">
+    $$\sum_{x'}\xi(x')P(x'|x,a)V(x',y\xi(x')).$$
+  </div>
+  <p>其中：</p>
+  <ul>
+    <li>\(P(x'|x,a)\)：基准模型下到达 \(x'\) 的概率；</li>
+    <li>\(\xi(x')P(x'|x,a)\)：最坏扭曲后的概率；</li>
+    <li>\(V(x',y\xi(x'))\)：到达下一状态后，在更新风险水平下的未来价值。</li>
+  </ul>
+  <h3>和普通 Bellman 方程对比</h3>
+  <table>
+    <tr><th>普通 MDP</th><th>NCVaR-RMDP</th></tr>
+    <tr>
+      <td>$$V(x)=\min_a\left[C(x,a)+\gamma\sum_{x'}P(x'|x,a)V(x')\right]$$</td>
+      <td>$$V(x,y)=\min_a\left[C(x,a)+\gamma\max_\xi\sum_{x'}\xi(x')P(x'|x,a)V(x',y\xi(x'))\right]$$</td>
+    </tr>
+  </table>
+  <p>NCVaR Bellman 方程比普通 Bellman 方程多了两个结构：</p>
+  <ol>
+    <li>概率被最坏扭曲：\(P\to \xi P\)；</li>
+    <li>风险水平被递归更新：\(y\to y\xi\)。</li>
+  </ol>
+</section>
+
+<section id="sec20">
+  <h2>20. Lemma 1 与 Theorem 2 说明了什么？</h2>
+  <h3>Lemma 1</h3>
+  <p>文章证明 Bellman operator 有四个性质：</p>
+  <table>
+    <tr><th>性质</th><th>含义</th><th>为什么重要</th></tr>
+    <tr><td>Monotonicity</td><td>如果一个价值函数处处更大，更新后仍然更大。</td><td>保证 Bellman 更新顺序稳定。</td></tr>
+    <tr><td>Transition invariance</td><td>价值函数平移时，Bellman 更新也相应平移。</td><td>类似动态规划中的标准风险度量性质。</td></tr>
+    <tr><td>Contraction</td><td>Bellman 更新会缩小两个价值函数之间的距离。</td><td>保证 value iteration 收敛。</td></tr>
+    <tr><td>Concavity preserving</td><td>如果 \(yV(x,y)\) 关于 \(y\) 是凹的，更新后仍保持凹性。</td><td>保证内部优化问题较好处理，也支持后面的线性插值算法。</td></tr>
+  </table>
+  <h3>Theorem 2</h3>
+  <p>Theorem 2 说明 Bellman equation 存在唯一固定点：</p>
+  <div class="formula-note">$$T[V](x,y)=V(x,y).$$</div>
+  <p>这个唯一解 \(V^*(x,y)\) 就是原始 NCVaR 优化问题的最优值：</p>
+  <div class="formula-note">
+    $$V^*(x,y)
+    =
+    \min_{\pi\in\Pi_H}
+    NCVaR_{y,\bar\kappa}
+    \left(
+    \lim_{T\to\infty}
+    \sum_{t=0}^{T}\gamma^t C(x_t,a_t)
+    \mid x_0=x,\pi
+    \right).$$
+  </div>
+  <p>虽然原问题是在 history-dependent policies 里优化：</p>
+  <div class="formula-note">$$\pi\in\Pi_H,$$</div>
+  <p>但文章说明存在一个最优 Markov policy。因此实际计算时，可以用关于 \(V^*\) 的 greedy policy 得到最优策略。</p>
+</section>
+
+<section id="sec21">
+  <h2>21. Algorithm 1 与 Algorithm 2</h2>
+  <h3>Algorithm 1：理论上的 NCVaR Value Iteration</h3>
+  <p>Algorithm 1 的思想很直接：</p>
+  <ol>
+    <li>对每个 \((x,y)\) 初始化 \(V_0(x,y)\)；</li>
+    <li>反复做 Bellman 更新：$$V_{t+1}(x,y)=T[V_t](x,y);$$</li>
+    <li>收敛后得到：$$V^*(x,y)=\lim_{t\to\infty}V_t(x,y);$$</li>
+    <li>用 \(V^*\) 构造 greedy policy。</li>
+  </ol>
+  <p>问题是 \(y\in(0,1]\) 是连续变量。如果对所有 \(y\) 都更新，计算不可行。</p>
+  <h3>Algorithm 2：实际可实现的线性插值版本</h3>
+  <p>为了处理连续的 \(y\)，文章选取有限个采样点：</p>
+  <div class="formula-note">$$Y(x)=\{y_1,y_2,\dots,y_{N(x)}\}.$$</div>
+  <p>然后只在这些采样点上保存和更新价值函数。对于落在两个采样点之间的 \(y\)，用线性插值近似。</p>
+  <p>文章的插值函数是：</p>
+  <div class="formula-note">
+    $$I_x[V](y)
+    =
+    y_iV(x,y_i)
+    +
+    \frac{
+    y_{i+1}V(x,y_{i+1})-y_iV(x,y_i)
+    }{y_{i+1}-y_i}
+    (y-y_i).
+    \tag{9}$$
+  </div>
+  <p>注意：它插值的不是 \(V(x,y)\)，而是 \(yV(x,y)\)。</p>
+  <div class="note">
+    这是因为 Lemma 1 里强调 \(yV(x,y)\) 的凹性保持。插值 \(yV\) 可以更好地保留这个结构。
+  </div>
+  <p>然后定义插值 Bellman operator：</p>
+  <div class="formula-note">
+    $$T_I[V](x,y)
+    =
+    \min_{a\in A}
+    \left[
+    C(x,a)
+    +
+    \gamma
+    \max_{\xi\in\mathcal U_{NCVaR}}
+    \sum_{x'\in\mathcal X}
+    \frac{I_{x'}[V](y\xi(x'))}{y}
+    P(x'|x,a)
+    \right].
+    \tag{10}$$
+  </div>
+  <p>所以：</p>
+  <table>
+    <tr><th>算法</th><th>特点</th><th>作用</th></tr>
+    <tr><td>Algorithm 1</td><td>连续 \(y\) 上的理论 value iteration</td><td>证明框架清晰，但直接实现困难。</td></tr>
+    <tr><td>Algorithm 2</td><td>采样 \(y\) 点 + 线性插值</td><td>更实际，可用于数值实验。</td></tr>
+  </table>
+</section>
+
+<section id="sec22">
+  <h2>22. 实验部分与图 1</h2>
+  <p>文章实验使用一个 grid world。</p>
+  <table>
+    <tr><th>设置</th><th>内容</th></tr>
+    <tr><td>网格大小</td><td>\(64\times 53\)</td></tr>
+    <tr><td>起点</td><td>\((60,50)\)</td></tr>
+    <tr><td>终点</td><td>\((60,2)\)</td></tr>
+    <tr><td>动作</td><td>east, south, west, north</td></tr>
+    <tr><td>正确移动概率</td><td>0.95</td></tr>
+    <tr><td>偏向其他邻居概率</td><td>\(0.05/3\)</td></tr>
+    <tr><td>障碍物数量</td><td>80</td></tr>
+    <tr><td>撞障碍物成本</td><td>40</td></tr>
+    <tr><td>安全移动成本</td><td>1</td></tr>
+  </table>
+  <p>图 1 比较了四种情况：</p>
+  <ol>
+    <li>没有不确定性；</li>
+    <li>RN derivative 不确定性；</li>
+    <li>KL divergence 不确定性；</li>
+    <li>decision-dependent uncertainty。</li>
+  </ol>
+  <p>图中颜色表示 optimal value function：蓝色风险较低，黄色风险较高；红线表示最优路径。</p>
+  <p>实验中选取：</p>
+  <div class="formula-note">$$\alpha=0.48,\quad K=2.$$</div>
+  <p>对于 RN derivative：</p>
+  <div class="formula-note">$$\alpha'_{CVaR}=\frac{0.48}{2}=0.24.$$</div>
+  <p>对于 KL divergence，文章得到：</p>
+  <div class="formula-note">$$\alpha'_{EVaR}=0.03.$$</div>
+  <p>这说明加入不确定性后，等价风险水平更保守。实验结果显示：在 robust 情况下，智能体路径会变得更谨慎，更倾向于避开高风险区域。</p>
+</section>
+
+<section id="sec23">
+  <h2>23. 对金融问题的启发</h2>
+  <p>如果用于金融，可以这样对应：</p>
+  <table>
+    <tr><th>文章符号</th><th>金融含义</th></tr>
+    <tr><td>\(x_t\)</td><td>市场状态，例如波动率、趋势、回撤、宏观状态、持仓状态。</td></tr>
+    <tr><td>\(a_t\)</td><td>动作，例如调仓、加仓、减仓、换仓。</td></tr>
+    <tr><td>\(C(x_t,a_t)\)</td><td>成本或损失，例如负收益、回撤、交易成本。</td></tr>
+    <tr><td>\(P(\cdot|x,a)\)</td><td>市场状态转移概率。</td></tr>
+    <tr><td>\(\tilde P\)</td><td>真实但未知的市场转移概率。</td></tr>
+    <tr><td>\(\mathcal P\)</td><td>模型误差范围。</td></tr>
+    <tr><td>\(CVaR_\alpha\)</td><td>极端亏损下的平均损失。</td></tr>
+    <tr><td>\(\bar\kappa(x,a)\)</td><td>某个状态动作下的不确定性强度。</td></tr>
+  </table>
+  <p>例如，可以设计：</p>
+  <div class="formula-note">
+    $$\bar\kappa(x,a)
+    =
+    1+
+    \lambda_1\cdot \text{Volatility}_t
+    +
+    \lambda_2\cdot \text{Drawdown}_t
+    +
+    \lambda_3\cdot \text{LiquidityRisk}_t.$$
+  </div>
+  <p>这样，在高波动、高回撤、低流动性的市场状态下，\(\bar\kappa(x,a)\) 更大，NCVaR 会自动变得更保守。</p>
+  <p>这篇文章适合作为理论依据，说明金融策略不仅应该控制尾部风险，还应该考虑转移模型的不确定性。</p>
+</section>
+
+<section id="links" class="linkbox">
+  <h2>需要加链接的地方</h2>
+  <p>如果你把这份 HTML 放进报告或网页，建议在以下地方加链接：</p>
+  <table>
+    <tr><th>术语或位置</th><th>建议链接到</th><th>HTML 示例</th></tr>
+    <tr>
+      <td>论文题目</td>
+      <td>IEEE DOI 页面</td>
+      <td><code>&lt;a href="https://doi.org/10.1109/ITW61385.2024.10806953" target="_blank"&gt;Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk&lt;/a&gt;</code></td>
+    </tr>
+    <tr>
+      <td>CVaR 定义</td>
+      <td>Rockafellar and Uryasev, Optimization of Conditional Value-at-Risk</td>
+      <td><code>&lt;a href="https://doi.org/10.21314/JOR.2000.038" target="_blank"&gt;Rockafellar and Uryasev (2000)&lt;/a&gt;</code></td>
+    </tr>
+    <tr>
+      <td>Robust MDP</td>
+      <td>Wiesemann, Kuhn, Rustem, Robust Markov Decision Processes</td>
+      <td><code>&lt;a href="https://doi.org/10.1287/moor.1120.0566" target="_blank"&gt;Wiesemann et al. (2013)&lt;/a&gt;</code></td>
+    </tr>
+    <tr>
+      <td>EVaR</td>
+      <td>Entropic Value-at-Risk 原始论文</td>
+      <td><code>&lt;a href="https://doi.org/10.1007/s10957-011-9968-2" target="_blank"&gt;Ahmadi-Javid (2012)&lt;/a&gt;</code></td>
+    </tr>
+    <tr>
+      <td>CVaR RL</td>
+      <td>Chow et al. CVaR optimization in MDPs / risk-sensitive decision-making</td>
+      <td><code>&lt;a href="https://arxiv.org/abs/1506.02188" target="_blank"&gt;Chow et al. (2015)&lt;/a&gt;</code></td>
+    </tr>
+    <tr>
+      <td>文档内部跳转</td>
+      <td>本文第 14 节 NCVaR 分解</td>
+      <td><code>&lt;a href="#sec14"&gt;为什么需要 NCVaR 分解？&lt;/a&gt;</code></td>
+    </tr>
+  </table>
+  <p class="small">说明：上面的 DOI/ArXiv 链接适合写在 HTML 中作为术语来源或参考文献入口。若正式论文写作，建议最终以参考文献格式列出。</p>
+</section>
+
+<footer>
+  <p>本 HTML 文档根据用户上传的论文《Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk》整理，用于学习和理解，不替代原论文。</p>
+</footer>
+
+</main>
+</body>
+</html>

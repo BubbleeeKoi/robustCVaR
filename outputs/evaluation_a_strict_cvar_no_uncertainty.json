@@ -1,0 +1,12 @@
+{
+  "episodes": 5000,
+  "mean_discounted_cost": 19.205959412562823,
+  "std_discounted_cost": 1.4672300669681326,
+  "var_cost": 18.868767452994916,
+  "cvar_cost": 19.675257327128346,
+  "success_rate": 0.9608,
+  "collision_rate": 0.0392,
+  "timeout_rate": 0.0,
+  "mean_steps": 56.539,
+  "risk_state_projection_rate": 0.0
+}

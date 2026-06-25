@@ -1,0 +1,7 @@
+# Runtime dependencies for the Figure 1 reproduction code.
+# Install these in the `portfolio` conda environment before running scripts.
+numpy
+Pillow
+matplotlib
+pymupdf
+aspose.slides
