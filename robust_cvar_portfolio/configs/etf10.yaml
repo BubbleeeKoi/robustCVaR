@@ -1,0 +1,29 @@
+# ETF10 实验配置（计划文档 §10 / §16）
+dataset: etf10
+tickers:
+  - SPY
+  - QQQ
+  - IWM
+  - TLT
+  - GLD
+  - XLF
+  - XLK
+  - XLE
+  - XLV
+  - XLU
+start_date: "2010-01-01"
+end_date: "2024-12-31"
+splits:
+  train: ["2010-01-01", "2017-12-31"]
+  val: ["2018-01-01", "2019-12-31"]
+  test: ["2020-01-01", "2024-12-31"]
+alpha: 0.05
+kappa_max: 1.0
+fixed_kappa: 2.0
+cost_rate: 0.001
+lookback_L: 20
+estimation_window: 252
+rebalance: monthly
+beta_vol: 1.0
+beta_dd: 1.0
+beta_conc: 0.5

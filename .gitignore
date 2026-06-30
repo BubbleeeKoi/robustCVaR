@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+.history/
 outputs/mplconfig/
 *.egg-info/
 .venv/

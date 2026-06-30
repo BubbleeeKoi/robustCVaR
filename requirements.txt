@@ -5,3 +5,7 @@ Pillow
 matplotlib
 pymupdf
 aspose.slides
+
+# Portfolio experiment (robust_cvar_portfolio/)
+# conda activate portfolio
+# pip install akshare pandas scipy pyyaml torch

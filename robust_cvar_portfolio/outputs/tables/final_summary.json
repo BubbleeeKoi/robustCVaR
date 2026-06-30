@@ -1,0 +1,36 @@
+{
+  "primary_metric": "cvar_5pct",
+  "best_rolling": {
+    "strategy": "C_state_robust",
+    "annualized_return": 0.0384430971648888,
+    "annualized_volatility": 0.1125096491129432,
+    "sharpe_ratio": 0.3416871127764121,
+    "sortino_ratio": 0.4514300548129779,
+    "max_drawdown": 0.1830913659470155,
+    "var_5pct": 0.0109898486133088,
+    "cvar_5pct": 0.016257396358939,
+    "avg_turnover": 0.0084449135563625,
+    "total_transaction_cost": 0.0,
+    "calmar_ratio": 0.2099667396441499,
+    "crisis_2020": 0.0227214552026894,
+    "crisis_2022": 0.0911154659310504
+  },
+  "best_overall": {
+    "annualized_return": 0.03844309716488681,
+    "annualized_volatility": 0.11250964911294273,
+    "sharpe_ratio": 0.341687112776396,
+    "sortino_ratio": 0.45143005481295423,
+    "max_drawdown": 0.18309136594701558,
+    "var_5pct": 0.010989848613308872,
+    "cvar_5pct": 0.016257396358939007,
+    "avg_turnover": 0.008444913556362581,
+    "total_transaction_cost": 0.0,
+    "calmar_ratio": 0.20996673964413906,
+    "method": "rolling_C_state_robust",
+    "crisis_2020": 0.0227214552026912,
+    "crisis_2022": 0.09111546593105002
+  },
+  "success_check": {
+    "D_cvar_lt_A": false
+  }
+}

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>状态-动作依赖鲁棒 CVaR 投资组合学习完整计划</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]'], ['$$', '$$']], processEscapes: true },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    body{margin:0;background:#f6f7fb;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.75}
+    .wrap{max-width:1180px;margin:0 auto;padding:28px}
+    main{background:white;border:1px solid #e5e7eb;border-radius:18px;padding:42px 56px;box-shadow:0 8px 25px rgba(15,23,42,.06)}
+    h1{font-size:34px;line-height:1.25;margin:0 0 8px;color:#111827} h2{font-size:26px;margin-top:46px;border-top:2px solid #e5e7eb;padding-top:22px;color:#111827} h3{font-size:21px;margin-top:30px;color:#111827}
+    .muted{color:#6b7280}.box{border-radius:14px;padding:16px 18px;margin:18px 0;border:1px solid #dbeafe;background:#eff6ff}.warn{background:#fffbeb;border-color:#fde68a}.ok{background:#ecfdf5;border-color:#bbf7d0}.bad{background:#fef2f2;border-color:#fecaca}
+    table{width:100%;border-collapse:collapse;margin:18px 0 24px;font-size:14px} th,td{border:1px solid #e5e7eb;padding:9px 12px;vertical-align:top} th{background:#f3f4f6;text-align:left}
+    code{background:#f3f4f6;padding:2px 5px;border-radius:5px} pre{background:#111827;color:#e5e7eb;border-radius:12px;padding:16px;overflow:auto} pre code{background:transparent;color:inherit;padding:0}
+    a{color:#1d4ed8}.toc{columns:2;margin:20px 0}.toc a{display:block;text-decoration:none;margin:3px 0}.toc a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+<div class="wrap"><main>
+<h1>完整研究与实现计划：状态-动作依赖鲁棒 CVaR 投资组合学习</h1>
+<p class="muted">HTML + MathJax 版本。请用浏览器打开，联网时公式会自动渲染。公式统一使用 <code>\(...\)</code> 与 <code>\[...\]</code>。</p>
+
+<div class="toc">
+<a href="#s1">1. 项目最终目标</a>
+<a href="#s2">2. 为什么要修改执行计划</a>
+<a href="#s3">3. 原文方法与本文方法关系</a>
+<a href="#s4">4. 核心创新点</a>
+<a href="#s5">5. 数学模型</a>
+<a href="#s6">6. \(\kappa(s,w)\) 设计</a>
+<a href="#s7">7. 退化关系</a>
+<a href="#s8">8. 执行路线</a>
+<a href="#s9">9. 阶段 0：GridWorld 收尾</a>
+<a href="#s10">10. 阶段 1：数据、指标、RCVaR</a>
+<a href="#s11">11. 阶段 2：非 RL rolling 组合</a>
+<a href="#s12">12. 阶段 3：PortfolioEnv 与 PPO</a>
+<a href="#s13">13. 阶段 4：CVaR-PPO 与固定鲁棒</a>
+<a href="#s14">14. 阶段 5：状态/动作依赖鲁棒 PPO</a>
+<a href="#s15">15. 阶段 6：Distributional Actor-Critic</a>
+<a href="#s16">16. 数据、baseline 与实验</a>
+<a href="#s17">17. 代码结构</a>
+<a href="#s18">18. 两周执行安排</a>
+<a href="#s19">19. 可行性判断</a>
+</div>
+
+<section id="s1">
+<h2>1. 项目最终目标</h2>
+<p>本项目的最终目标是提出一种面向真实股票市场的 <b>State-Action-Dependent Robust CVaR Portfolio Learning</b> 方法，用于动态投资组合优化。</p>
+<p>论文暂定题目可以是：</p>
+<div class="box ok"><p><b>Regime-Adaptive State-Action-Dependent Robust CVaR Portfolio Learning for Dynamic Stock Allocation</b></p><p>或：<b>State-Action-Dependent Robust CVaR Reinforcement Learning for Dynamic Portfolio Optimization</b></p></div>
+<p>本文的核心目标不是追求最高收益，而是在保持合理收益的同时，显著降低：</p>
+\[
+CVaR_{5\%},\quad VaR_{5\%},\quad Maximum\ Drawdown,\quad Crisis\ Period\ Loss.
+\]
+<p>首要评价指标为：</p>
+\[
+\boxed{\text{Out-of-sample }CVaR_{5\%}\text{ of net portfolio loss}.}
+\]
+<p>本文基于 Ni &amp; Lai 的 robust CVaR-RL 思想，但不是继续做 GridWorld 复现，也不是把 GridWorld 直接换成股票数据。原文研究的是有限 RMDP 中的 robust CVaR 与 NCVaR value iteration；本文要迁移的是 <b>robust CVaR</b>、<b>fixed ambiguity</b>、<b>state-action-dependent ambiguity budget</b> 这三条方法主线。</p>
+</section>
+
+<section id="s2">
+<h2>2. 为什么要修改执行计划？</h2>
+<p>前面的总体方向仍然正确：</p>
+\[
+\kappa(s,w)+RCVaR_{\alpha,\kappa}+Portfolio\ Learning.
+\]
+<p>但执行顺序要修改。不要一开始直接做 PPO / Actor-Critic，因为金融 RL 噪声大、训练不稳定、结果难解释。如果 robust CVaR 风险层本身还没验证，就直接接 PPO，后面出问题很难定位。</p>
+<p>修改后的路线应为：</p>
+\[
+\boxed{\text{数据与指标}\rightarrow\text{robust CVaR layer}\rightarrow\text{非 RL rolling portfolio}\rightarrow\text{PortfolioEnv}\rightarrow\text{PPO}\rightarrow\text{CVaR-PPO}\rightarrow\text{Robust CVaR-PPO}\rightarrow\text{State-action robust CVaR-PPO}.}
+\]
+<div class="box warn"><p><b>核心修改：</b>PPO 后置，robust CVaR layer 和 rolling portfolio 前置。先把金融风险层验证出来，再进入 RL。</p></div>
+</section>
+
+<section id="s3">
+<h2>3. 原文方法与本文方法的关系</h2>
+<p>原文核心模型为：</p>
+\[
+\min_{\pi}\max_{\tilde P\in\mathcal P} CVaR_\alpha\left(\sum_{t=0}^{\infty}\gamma^t C(x_t,a_t)\right).
+\]
+<p>本文将其改写为金融动态组合问题：</p>
+\[
+\min_{\pi_\theta}\max_{\tilde P\in\mathcal P_{\kappa(s_t,w_t)}}CVaR_\alpha\left(\sum_{t=0}^{T-1}\gamma^t L_{t+1}(s_t,w_t)\right).
+\]
+<table><thead><tr><th>原文 RMDP / GridWorld</th><th>本文金融组合</th></tr></thead><tbody>
+<tr><td>状态 \(x_t\)</td><td>市场状态 \(s_t\)</td></tr>
+<tr><td>动作 \(a_t\)</td><td>组合权重 \(w_t\)</td></tr>
+<tr><td>成本 \(C(x_t,a_t)\)</td><td>组合净损失 \(L_{t+1}(s_t,w_t)\)</td></tr>
+<tr><td>转移不确定性 \(\tilde P\in\mathcal P\)</td><td>市场状态转移不确定性 \(\tilde P\in\mathcal P_{\kappa(s,w)}\)</td></tr>
+<tr><td>\(\kappa(x,a)\)</td><td>\(\kappa(s_t,w_t)\)</td></tr>
+<tr><td>NCVaR value iteration</td><td>robust CVaR risk layer + portfolio learning</td></tr>
+<tr><td>离散状态、离散动作</td><td>高维市场状态、连续组合权重</td></tr>
+</tbody></table>
+<div class="box"><p><b>严谨表述：</b>原文是 robust risk-sensitive RL / RMDP 理论框架，但实现是 value iteration，不是 PPO。本文的 PPO / actor-critic 是为了适配真实金融连续动作问题而做的扩展。</p></div>
+</section>
+
+<section id="s4">
+<h2>4. 核心创新点</h2>
+<h3>4.1 金融状态-动作依赖 ambiguity budget</h3>
+<p>本文提出：</p>
+\[
+\kappa_t=\kappa(s_t,w_t).
+\]
+<p>含义是：市场越不稳定、组合动作越激进，模型不确定预算越大。例如高波动、高回撤、高相关、高集中度、高换手都应使 \(\kappa_t\) 增大。</p>
+
+<h3>4.2 Robust CVaR risk layer</h3>
+<p>本文不把 CVaR 简单作为 reward penalty，而是用对偶形式构造风险层：</p>
+\[
+RCVaR_{\alpha,\kappa}(Z)=\max_{q\in\mathcal Q_{\alpha,\kappa}}\sum_{i=1}^{B}q_iZ_i,
+\]
+\[
+\mathcal Q_{\alpha,\kappa}=\left\{q\in\mathbb R_+^B:\sum_{i=1}^{B}q_i=1,\ 0\le q_i\le \frac{\kappa_i}{\alpha B}\right\}.
+\]
+<p>当 \(\kappa_i=1\) 时退化为普通 CVaR；当 \(\kappa_i=K\) 时变成 fixed robust CVaR；当 \(\kappa_i=\kappa(s_i,w_i)\) 时就是本文的状态-动作依赖鲁棒 CVaR。</p>
+
+<h3>4.3 渐进式实现</h3>
+<p>先做非 RL 的 rolling robust CVaR portfolio，验证风险层有效，再接入 PPO / actor-critic。这样更稳，也更容易写成论文。</p>
+</section>
+
+<section id="s5">
+<h2>5. 数学模型</h2>
+<h3>5.1 股票收益与组合权重</h3>
+<p>设市场中有 \(N\) 只股票，第 \(t\) 期收益向量为：</p>
+\[
+r_t\in\mathbb R^N.
+\]
+<p>组合权重为：</p>
+\[
+w_t\in\Delta^N,
+\]
+\[
+\Delta^N=\left\{w\in\mathbb R^N:w_i\ge0,\ \mathbf 1^\top w=1\right\}.
+\]
+
+<h3>5.2 市场状态</h3>
+\[
+s_t=\left(R_{t-L:t},z_t,w_{t-1}\right),
+\]
+\[
+R_{t-L:t}=[r_{t-L},r_{t-L+1},\dots,r_t]\in\mathbb R^{L\times N}.
+\]
+<p>其中 \(z_t\) 包括市场波动率、平均相关性、市场回撤、近期尾部亏损强度和横截面离散度：</p>
+\[
+z_t=(Vol_t,Corr_t,DD_t,Tail_t,Disp_t).
+\]
+
+<h3>5.3 净收益与净损失</h3>
+<p>组合毛收益为：</p>
+\[
+R_{t+1}^{p}=w_t^\top r_{t+1}.
+\]
+<p>换手率为：</p>
+\[
+TO_t=\|w_t-w_{t-1}\|_1.
+\]
+<p>设交易成本率为 \(c>0\)，组合净收益为：</p>
+\[
+R_{t+1}^{net}=w_t^\top r_{t+1}-c\|w_t-w_{t-1}\|_1.
+\]
+<p>净损失定义为：</p>
+\[
+\boxed{L_{t+1}(s_t,w_t)=-w_t^\top r_{t+1}+c\|w_t-w_{t-1}\|_1.}
+\]
+<p>累计损失为：</p>
+\[
+Z^\pi=\sum_{t=0}^{T-1}\gamma^tL_{t+1}(s_t,w_t).
+\]
+<p>金融回测中可以取 \(\gamma=1\)。</p>
+
+<h3>5.4 普通 CVaR</h3>
+<p>给定损失样本 \(Z_1,\dots,Z_B\)，普通经验 CVaR 可写为：</p>
+\[
+CVaR_\alpha(Z)=\max_{q\in\mathcal Q_\alpha}\sum_{i=1}^{B}q_iZ_i,
+\]
+\[
+\mathcal Q_\alpha=\left\{q\in\mathbb R_+^B:\sum_{i=1}^{B}q_i=1,\ 0\le q_i\le\frac{1}{\alpha B}\right\}.
+\]
+
+<h3>5.5 状态-动作依赖 Robust CVaR</h3>
+\[
+\boxed{RCVaR_{\alpha,\kappa}(Z)=\max_{q\in\mathcal Q_{\alpha,\kappa}}\sum_{i=1}^{B}q_iZ_i}
+\]
+\[
+\boxed{\mathcal Q_{\alpha,\kappa}=\left\{q\in\mathbb R_+^B:\sum_{i=1}^{B}q_i=1,\ 0\le q_i\le\frac{\kappa_i}{\alpha B}\right\}.}
+\]
+<p>其中：</p>
+\[
+\kappa_i=\kappa(s_i,w_i).
+\]
+<p>这个形式表示：高不确定市场状态或高风险动作对应的损失样本，可以在 worst-case tail distribution 中获得更高权重。</p>
+</section>
+
+<section id="s6">
+<h2>6. \(\kappa(s,w)\) 设计</h2>
+<h3>6.1 第一版简化设计</h3>
+<p>第一版只使用三个变量：</p>
+\[
+Vol_t,\quad DD_t,\quad Conc_t.
+\]
+<p>组合集中度：</p>
+\[
+Conc_t=\sum_{i=1}^{N}w_{i,t}^2.
+\]
+<p>定义：</p>
+\[
+\kappa(s_t,w_t)=1+\kappa_{\max}\sigma\left(\beta_1\widetilde{Vol}_t+\beta_2\widetilde{DD}_t+\beta_3\widetilde{Conc}_t\right),
+\]
+\[
+\sigma(x)=\frac{1}{1+e^{-x}}.
+\]
+<p>因此：</p>
+\[
+\kappa(s_t,w_t)\in[1,1+\kappa_{\max}].
+\]
+<p>第一版取 \(\kappa_{\max}=1\)，因此 \(\kappa(s_t,w_t)\in[1,2]\)。</p>
+
+<h3>6.2 完整版设计</h3>
+\[
+\kappa(s_t,w_t)=1+\kappa_{\max}\sigma\left(\beta_0+\beta_1\widetilde{Vol}_t+\beta_2\widetilde{Corr}_t+\beta_3\widetilde{DD}_t+\beta_4\widetilde{Tail}_t+\beta_5\widetilde{Conc}_t+\beta_6\widetilde{Turn}_t\right),
+\]
+\[
+Turn_t=\|w_t-w_{t-1}\|_1.
+\]
+<p>所有特征使用 rolling standardization：</p>
+\[
+\widetilde{x}_t=\frac{x_t-\mu_{t,L}}{\sigma_{t,L}+\epsilon}.
+\]
+</section>
+
+<section id="s7">
+<h2>7. 退化关系</h2>
+<h3>7.1 退化为普通 CVaR</h3>
+<p>若 \(\kappa_i=1\)，则：</p>
+\[
+RCVaR_{\alpha,\kappa}(Z)=CVaR_\alpha(Z).
+\]
+
+<h3>7.2 退化为 fixed robust CVaR</h3>
+<p>若 \(\kappa_i=K\)，则：</p>
+\[
+q_i\le\frac{K}{\alpha B}.
+\]
+<p>等价于更低置信水平：</p>
+\[
+\alpha'=\frac{\alpha}{K},
+\]
+\[
+RCVaR_{\alpha,K}(Z)=CVaR_{\alpha/K}(Z).
+\]
+
+<h3>7.3 状态-动作依赖 robust CVaR</h3>
+<p>若 \(\kappa_i=\kappa(s_i,w_i)\)，则每个样本的尾部权重上界随市场状态和组合动作动态变化。</p>
+</section>
+
+<section id="s8">
+<h2>8. 修改后的整体执行路线</h2>
+<ol>
+<li><b>阶段 0：</b>GridWorld 复现收尾。</li>
+<li><b>阶段 1：</b>数据管线、指标与 robust CVaR layer。</li>
+<li><b>阶段 2：</b>非 RL rolling robust CVaR portfolio。</li>
+<li><b>阶段 3：</b>PortfolioEnv 与 PPO baseline。</li>
+<li><b>阶段 4：</b>CVaR-PPO 与 fixed robust CVaR-PPO。</li>
+<li><b>阶段 5：</b>State-dependent 与 State-action-dependent robust CVaR-PPO。</li>
+<li><b>阶段 6：</b>Distributional Actor-Critic 扩展。</li>
+</ol>
+</section>
+
+<section id="s9">
+<h2>9. 阶段 0：GridWorld 复现收尾</h2>
+<p>不再继续追求 Figure 1 的严格视觉拟合，而是将其作为方法理解和诊断验证。</p>
+<ol>
+<li>保存当前四图；</li><li>保存路径 CSV；</li><li>保存复现说明；</li><li>写清楚缺失参数；</li><li>记录 1C 中 KL/EVaR 公式和实验数值口径不一致的问题；</li><li>记录 1D 中 \(\kappa(x,a)\) 是假设函数，不是作者公开函数。</li>
+</ol>
+<pre><code>outputs/gridworld_repro/
+├── figure1_reproduction.png
+├── paths.csv
+├── REPRO_STATUS.md
+└── assumptions.md</code></pre>
+</section>
+
+<section id="s10">
+<h2>10. 阶段 1：数据、指标与 robust CVaR layer</h2>
+<h3>10.1 数据管线</h3>
+<p>第一版建议：ETF 10 个 \(\rightarrow\) 股票 30 个 \(\rightarrow\) 股票 100 个。</p>
+<p>时间范围：\(2010-01-01\sim2024-12-31\)。划分：</p>
+\[
+2010-2017:\ training,\quad 2018-2019:\ validation,\quad 2020-2024:\ test.
+\]
+<pre><code>data_loader.py
+outputs:
+data/processed/prices.csv
+data/processed/returns.csv
+data/processed/splits.json
+data/processed/dataset_summary.csv</code></pre>
+
+<h3>10.2 风险指标模块</h3>
+<pre><code>risk_metrics.py
+annualized_return(returns)
+annualized_volatility(returns)
+sharpe_ratio(returns)
+sortino_ratio(returns)
+max_drawdown(nav)
+var_alpha(losses, alpha=0.05)
+cvar_alpha(losses, alpha=0.05)
+turnover(weights)
+transaction_cost(weights, cost_rate)
+calmar_ratio(returns, nav)</code></pre>
+<div class="box bad"><p>CVaR 必须对净损失计算：\(L_t=-R_t^{net}\)，不要直接对收益右尾计算。</p></div>
+
+<h3>10.3 Robust CVaR layer</h3>
+<pre><code>robust_cvar_layer.py
+robust_cvar(losses, kappa, alpha=0.05)</code></pre>
+<p>计算：</p>
+\[
+RCVaR_{\alpha,\kappa}(Z)=\max_q\sum_iq_iZ_i,
+\quad 0\le q_i\le\frac{\kappa_i}{\alpha B},\quad \sum_iq_i=1.
+\]
+<p>实现：按损失从大到小排序，从最大损失开始按上界 \(u_i=\kappa_i/(\alpha B)\) 分配权重，直到总权重为 1。</p>
+<p>单元测试：</p>
+<ul><li>\(\kappa_i=1\) 时等于普通 CVaR；</li><li>\(\kappa_i=K\) 时结果不小于普通 CVaR；</li><li>高损失样本的 \(\kappa_i\) 增大时，RCVaR 增大。</li></ul>
+</section>
+
+<section id="s11">
+<h2>11. 阶段 2：非 RL rolling robust CVaR portfolio</h2>
+<p>这是关键修改。先用非 RL 方法验证核心风险模型。</p>
+<p>在每个调仓时点 \(t\)，用过去 \(M\) 天收益作为估计窗口，求解：</p>
+\[
+\min_{w\in\Delta^N} RCVaR_{\alpha,\kappa(s_t,w)}\left(\left\{-w^\top r_\tau+c\|w-w_{t-1}\|_1\right\}_{\tau=t-M}^{t-1}\right).
+\]
+<p>约束：</p>
+\[
+w_i\ge0,\quad \sum_iw_i=1.
+\]
+<p>四个版本：</p>
+<table><thead><tr><th>版本</th><th>设定</th><th>含义</th></tr></thead><tbody>
+<tr><td>A</td><td>\(\kappa=1\)</td><td>普通 CVaR portfolio</td></tr>
+<tr><td>B</td><td>\(\kappa=K\)</td><td>fixed robust CVaR portfolio</td></tr>
+<tr><td>C</td><td>\(\kappa=\kappa(s_t)\)</td><td>状态依赖 robust CVaR portfolio</td></tr>
+<tr><td>D</td><td>\(\kappa=\kappa(s_t,w)\)</td><td>状态-动作依赖 robust CVaR portfolio</td></tr>
+</tbody></table>
+<p>第一版调仓频率：monthly 或 weekly；不建议 daily。估计窗口建议 \(M=252\)，后续比较 \(M\in\{252,504\}\)。</p>
+<pre><code>outputs/rolling_portfolio/
+├── rolling_metrics.csv
+├── rolling_nav_comparison.png
+├── rolling_drawdown_comparison.png
+├── rolling_weights.csv
+└── rolling_kappa_series.csv</code></pre>
+<p>成功标准：</p>
+\[
+CVaR_{5\%}(\kappa(s,w))<CVaR_{5\%}(\kappa=1),\quad MDD(\kappa(s,w))<MDD(\kappa=1).
+\]
+</section>
+
+<section id="s12">
+<h2>12. 阶段 3：PortfolioEnv 与 PPO baseline</h2>
+<p>环境文件：</p>
+<pre><code>env_portfolio.py</code></pre>
+<p>状态、动作和损失：</p>
+\[
+s_t=(R_{t-L:t},z_t,w_{t-1}),\quad w_t\in\Delta^N,
+\]
+\[
+L_{t+1}=-w_t^\top r_{t+1}+c\|w_t-w_{t-1}\|_1.
+\]
+<p>reward 可以设为：</p>
+\[
+reward_t=R_{t+1}^{net}=-L_{t+1}.
+\]
+<p>info 输出：</p>
+<pre><code>portfolio_return
+transaction_cost
+net_return
+loss
+turnover
+weights
+market_features
+kappa</code></pre>
+<p>PPO baseline 策略：</p>
+\[
+w_t=\operatorname{softmax}(f_\theta(s_t)).
+\]
+<p>目标：</p>
+\[
+\max_\theta \mathbb E[R_{t+1}^{net}].
+\]
+</section>
+
+<section id="s13">
+<h2>13. 阶段 4：CVaR-PPO 与 fixed robust CVaR-PPO</h2>
+<h3>13.1 CVaR-PPO</h3>
+<p>设置 \(\kappa=1\)，此时 \(RCVaR_{\alpha,\kappa}=CVaR_\alpha\)。目标：</p>
+\[
+\min_\theta CVaR_\alpha(Z^\pi).
+\]
+
+<h3>13.2 Fixed robust CVaR-PPO</h3>
+<p>设置 \(\kappa=K\)，例如 \(K=1.5\) 或 \(K=2\)。此时：</p>
+\[
+RCVaR_{\alpha,K}(Z)=CVaR_{\alpha/K}(Z).
+\]
+<p>比较 PPO、CVaR-PPO 和 fixed robust CVaR-PPO，期望 fixed robust 版本在 CVaR 和 MDD 上优于 PPO。</p>
+</section>
+
+<section id="s14">
+<h2>14. 阶段 5：State-dependent 与 State-action-dependent robust CVaR-PPO</h2>
+<h3>14.1 State-dependent robust CVaR-PPO</h3>
+\[
+\kappa_i=\kappa(s_i)=1+\kappa_{\max}\sigma(\beta_1\widetilde{Vol}_t+\beta_2\widetilde{DD}_t).
+\]
+<h3>14.2 State-action-dependent robust CVaR-PPO</h3>
+\[
+\kappa_i=\kappa(s_i,w_i)=1+\kappa_{\max}\sigma(\beta_1\widetilde{Vol}_t+\beta_2\widetilde{DD}_t+\beta_3\widetilde{Conc}_t).
+\]
+<p>最终比较：</p>
+\[
+\kappa=1,\quad \kappa=K,\quad \kappa(s),\quad \kappa(s,w).
+\]
+<p>期望最终模型在 \(CVaR_{5\%}\)、MDD、Crisis Loss 上更好。</p>
+</section>
+
+<section id="s15">
+<h2>15. 阶段 6：Distributional Actor-Critic 扩展</h2>
+<p>若 PPO 版本稳定，再实现 quantile critic：</p>
+\[
+Z_\psi(s,w)=\{z_1,z_2,\dots,z_M\}.
+\]
+<p>actor 优化：</p>
+\[
+\min_\theta RCVaR_{\alpha,\kappa(s,\pi_\theta(s))}\left(Z_\psi(s,\pi_\theta(s))\right).
+\]
+<p>该版本更贴近 CVaR 的分布尾部本质，可作为论文增强版或后续拓展。</p>
+</section>
+
+<section id="s16">
+<h2>16. 数据、baseline 与实验</h2>
+<h3>16.1 数据集顺序</h3>
+<ol><li>10 个 ETF：SPY, QQQ, IWM, TLT, GLD, XLF, XLK, XLE, XLV, XLU；</li><li>30 只 S&amp;P 100 股票；</li><li>100 只股票扩展实验。</li></ol>
+<h3>16.2 时间划分</h3>
+\[
+2010-2017:\ training,\quad 2018-2019:\ validation,\quad 2020-2024:\ test.
+\]
+<h3>16.3 Baselines</h3>
+<p>传统 baseline：Equal Weight、Buy-and-Hold、Minimum Variance、Mean-Variance、Historical CVaR Portfolio、Static Robust CVaR Portfolio。</p>
+<p>RL baseline：PPO、CVaR-PPO、Fixed robust CVaR-PPO、State robust CVaR-PPO、State-action robust CVaR-PPO。</p>
+<h3>16.4 评价指标</h3>
+<table><thead><tr><th>指标</th><th>方向</th></tr></thead><tbody>
+<tr><td>Annualized Return</td><td>越高越好</td></tr><tr><td>Annualized Volatility</td><td>越低越好</td></tr><tr><td>Sharpe Ratio</td><td>越高越好</td></tr><tr><td>Sortino Ratio</td><td>越高越好</td></tr><tr><td>Maximum Drawdown</td><td>越低越好</td></tr><tr><td>VaR 5%</td><td>越低越好</td></tr><tr><td>CVaR 5%</td><td>越低越好</td></tr><tr><td>Turnover</td><td>越低越好</td></tr><tr><td>Transaction Cost</td><td>越低越好</td></tr><tr><td>Calmar Ratio</td><td>越高越好</td></tr>
+</tbody></table>
+<h3>16.5 实验设计</h3>
+<ol>
+<li>主样本外回测；</li><li>危机期分析：2020 COVID、2022 加息高波动、高 VIX、市场下跌时期；</li><li>消融：\(\kappa=1\)、\(\kappa=K\)、\(\kappa(s)\)、\(\kappa(s,w)\)；</li><li>\(\alpha\) 敏感性：\(\alpha\in\{0.01,0.05,0.10\}\)；</li><li>\(\kappa_{\max}\) 敏感性：\(\kappa_{\max}\in\{0,0.5,1,2\}\)；</li><li>\(\kappa_t\) 可解释性：对比 \(Vol_t\)、\(DD_t\)、\(Corr_t\)、market loss。</li>
+</ol>
+</section>
+
+<section id="s17">
+<h2>17. 代码结构</h2>
+<pre><code>robust_cvar_portfolio/
+├── data/
+│   ├── raw/
+│   ├── processed/
+├── configs/
+│   ├── etf10.yaml
+│   ├── sp30.yaml
+├── src/
+│   ├── data_loader.py
+│   ├── features.py
+│   ├── risk_metrics.py
+│   ├── robust_cvar_layer.py
+│   ├── backtest.py
+│   ├── baselines.py
+│   ├── rolling_rcvar.py
+│   ├── env_portfolio.py
+│   ├── evaluation.py
+│   ├── agents/
+│   │   ├── ppo.py
+│   │   ├── cvar_ppo.py
+│   │   ├── robust_cvar_ppo.py
+│   │   ├── sad_rcvar_ppo.py
+│   │   ├── distributional_actor_critic.py
+├── scripts/
+│   ├── run_data_pipeline.py
+│   ├── run_equal_weight.py
+│   ├── run_rolling_rcvar.py
+│   ├── run_baselines.py
+│   ├── train_ppo.py
+│   ├── train_cvar_ppo.py
+│   ├── train_sad_rcvar.py
+│   ├── evaluate.py
+│   ├── plot_results.py
+├── tests/
+│   ├── test_risk_metrics.py
+│   ├── test_robust_cvar_layer.py
+│   ├── test_env_portfolio.py
+├── outputs/
+│   ├── tables/
+│   ├── figures/
+│   ├── checkpoints/
+└── README.md</code></pre>
+</section>
+
+<section id="s18">
+<h2>18. 最近两周执行安排</h2>
+<table><thead><tr><th>时间</th><th>任务</th><th>输出</th></tr></thead><tbody>
+<tr><td>第 1-2 天</td><td>数据管线：ETF10 或股票30、returns、splits、summary</td><td><code>prices.csv</code>, <code>returns.csv</code>, <code>splits.json</code></td></tr>
+<tr><td>第 3-4 天</td><td>风险指标：AnnRet、Vol、Sharpe、Sortino、MDD、VaR、CVaR、turnover、cost</td><td><code>risk_metrics.py</code></td></tr>
+<tr><td>第 5-6 天</td><td>robust CVaR layer 与单元测试</td><td><code>robust_cvar_layer.py</code>, tests</td></tr>
+<tr><td>第 7-9 天</td><td>rolling portfolio：普通 CVaR、fixed robust、state、state-action</td><td><code>rolling_metrics.csv</code>, NAV 图</td></tr>
+<tr><td>第 10-12 天</td><td>PortfolioEnv 与 sanity check</td><td><code>env_portfolio.py</code></td></tr>
+<tr><td>第 13-14 天</td><td>PPO baseline 初版</td><td><code>ppo_initial_metrics.csv</code></td></tr>
+</tbody></table>
+</section>
+
+<section id="s19">
+<h2>19. 可行性判断</h2>
+<p>这个方向是可行的，但不能把目标写成“收益最高”。真正目标应写成：</p>
+\[
+\boxed{\text{在保持合理收益的同时降低尾部风险、最大回撤和危机期损失。}}
+\]
+<p>真正的创新点在于：</p>
+\[
+\boxed{\kappa(s,w)+RCVaR_{\alpha,\kappa}+dynamic\ portfolio\ learning.}
+\]
+<div class="box ok"><p><b>下一步立即执行：</b>data pipeline + risk metrics + robust CVaR layer + rolling robust portfolio。不要先写复杂 PPO。先把 robust CVaR 金融风险层验证出来，这是整篇论文的基础。</p></div>
+</section>
+
+<footer class="muted" style="margin-top:50px;border-top:1px solid #e5e7eb;padding-top:18px">
+<p>若公式仍不显示：请确认浏览器能访问 <code>https://cdn.jsdelivr.net</code>。若离线使用，需要把 MathJax 下载到本地并替换脚本链接。</p>
+</footer>
+</main></div>
+</body>
+</html>
