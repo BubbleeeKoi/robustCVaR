@@ -1,4 +1,4 @@
-# ETF10 实验配置（计划文档 §10 / §16）
+# ETF10（V1 已完成）
 dataset: etf10
 tickers:
   - SPY
@@ -26,4 +26,6 @@ estimation_window: 252
 rebalance: monthly
 beta_vol: 1.0
 beta_dd: 1.0
+beta_mom: 0.5
+beta_corr: 0.5
 beta_conc: 0.5

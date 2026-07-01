@@ -46,14 +46,40 @@ def download_prices(
     tickers: list[str],
     start_date: str,
     end_date: str,
-    sleep_sec: float = 0.3,
+    sleep_sec: float = 0.2,
+    min_days: int = 1500,
 ) -> pd.DataFrame:
-    frames: list[pd.Series] = []
+    collected: dict[str, pd.Series] = {}
+    failed: list[str] = []
+    cutoff = pd.Timestamp(start_date)
+    end = pd.Timestamp(end_date)
+
     for ticker in tickers:
-        frames.append(_fetch_us_daily(ticker, start_date, end_date))
+        try:
+            series = _fetch_us_daily(ticker, start_date, end_date)
+            sub = series.loc[cutoff:end].dropna()
+            if len(sub) >= min_days:
+                collected[ticker] = sub
+            else:
+                failed.append(f"{ticker}(days={len(sub)})")
+        except Exception:  # noqa: BLE001
+            failed.append(ticker)
         time.sleep(sleep_sec)
-    prices = pd.concat(frames, axis=1).sort_index()
-    prices = prices.dropna(how="any")
+
+    if len(collected) < 5:
+        raise RuntimeError(f"too few valid tickers ({len(collected)}); failed={failed}")
+
+    prices = pd.DataFrame(collected).sort_index().dropna(how="any")
+    if prices.empty or len(prices) < min_days:
+        raise RuntimeError(
+            f"overlap too short: {len(prices)} days; failed={failed}; assets={list(collected)}"
+        )
+    if failed:
+        print(f"  warning: excluded tickers {failed}")
+    print(
+        f"  panel: {prices.shape[1]} assets, {prices.shape[0]} days, "
+        f"{prices.index.min().date()} ~ {prices.index.max().date()}"
+    )
     return prices
 
 

@@ -1,0 +1,303 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Robust CVaR 顶刊级执行协议 下一步（完整可执行版）</title>
+
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$']],
+    displayMath: [['$$', '$$']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+body{
+    font-family: "Microsoft YaHei", Arial;
+    margin: 40px;
+    line-height: 1.7;
+    max-width: 1000px;
+}
+h1,h2,h3{color:#222;}
+.box{
+    background:#f5f5f5;
+    padding:12px;
+    border-left:5px solid #1565c0;
+}
+code{
+    background:#eee;
+    padding:2px 4px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Robust CVaR 投资组合优化（V4：顶刊级完整执行协议）</h1>
+
+<div class="box">
+<b>核心定位：</b> 本文档不是“计划”，而是“可执行科研协议（EEP）”。  
+目标：从数据 → 模型 → 实验 → 论文结果 全流程闭环。
+</div>
+
+<h2>一、系统总模型（必须统一理解）</h2>
+
+$$
+s_t \rightarrow \kappa_\theta(s_t) \rightarrow RCVaR_{\alpha,\kappa} \rightarrow w_t \rightarrow L_t
+$$
+
+<div class="box">
+<b>核心创新：</b> Risk Measure Learning（风险度量学习）
+</div>
+
+---
+
+<h2>二、代码系统结构（必须按此实现）</h2>
+
+<pre>
+risk/
+    rcvar.py
+    kappa.py
+    risk_engine.py
+
+portfolio/
+    optimizer.py
+    rolling.py
+
+data/
+    loader.py
+
+experiments/
+    run_rolling.py
+    run_ablation.py
+</pre>
+
+---
+
+<h2>三、核心数学模型</h2>
+
+<h3>3.1 Portfolio Loss</h3>
+
+$$
+L_{t+1} = -w_t^T r_{t+1} + c||w_t - w_{t-1}||_1
+$$
+
+---
+
+<h3>3.2 RCVaR</h3>
+
+$$
+RCVaR = \max_q \sum q_i L_i
+$$
+
+$$
+0 \le q_i \le \frac{\kappa_i}{\alpha B}
+$$
+
+---
+
+<h3>3.3 Risk Function (核心创新)</h3>
+
+$$
+\kappa_\theta(s) = 1 + \kappa_{max} \cdot \sigma(f_\theta(s))
+$$
+
+---
+
+<h2>四、完整实验执行流程（核心）</h2>
+
+<h3>STEP 1：数据加载</h3>
+
+<ul>
+<li>ETF10 → ETF20 → SP30 → SP100</li>
+<li>输出：raw_data.csv</li>
+</ul>
+
+<div class="box">
+目标：保证数据跨市场一致性
+</div>
+
+---
+
+<h3>STEP 2：State构建</h3>
+
+<pre>
+state s_t = [
+    volatility,
+    drawdown,
+    momentum,
+    correlation
+]
+</pre>
+
+<ul>
+<li>输出：state_matrix.npy</li>
+</ul>
+
+---
+
+<h3>STEP 3：κ(s)计算</h3>
+
+<pre>
+kappa = kappa_net(state)
+</pre>
+
+<ul>
+<li>输出：kappa_series.csv</li>
+</ul>
+
+---
+
+<h3>STEP 4：RCVaR计算</h3>
+
+<pre>
+risk = RCVaR(losses, kappa)
+</pre>
+
+<ul>
+<li>输出：risk_score.csv</li>
+</ul>
+
+---
+
+<h3>STEP 5：Portfolio Optimization</h3>
+
+<pre>
+w_t = argmin RCVaR(loss)
+</pre>
+
+<ul>
+<li>输出：weights.csv</li>
+</ul>
+
+---
+
+<h3>STEP 6：Backtest</h3>
+
+<ul>
+<li>NAV curve</li>
+<li>Drawdown</li>
+<li>CVaR time series</li>
+</ul>
+
+---
+
+<h2>五、模型对比实验（SCI核心）</h2>
+
+<table border="1" cellpadding="6">
+<tr>
+<th>模型</th>
+<th>说明</th>
+</tr>
+<tr>
+<td>A</td>
+<td>CVaR baseline</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Fixed robust CVaR</td>
+</tr>
+<tr>
+<td>C</td>
+<td>State-dependent κ(s)</td>
+</tr>
+<tr>
+<td>D</td>
+<td>State-action κ(s,w)</td>
+</tr>
+</table>
+
+---
+
+<h2>六、实验判定标准（非常关键）</h2>
+
+<div class="box">
+
+<b>模型 C 成功条件：</b>
+
+<ul>
+<li>CVaR ↓（必须最低）</li>
+<li>MDD ↓（必须最低或最优）</li>
+<li>crisis loss ↓</li>
+<li>跨市场稳定（ETF/SP一致）</li>
+</ul>
+
+</div>
+
+---
+
+<h2>七、Ablation实验（必须）</h2>
+
+<ul>
+<li>w/o κ → CVaR显著上升</li>
+<li>fixed κ → 不稳定</li>
+<li>manual κ → 次优</li>
+<li>learned κ → 最优</li>
+</ul>
+
+---
+
+<h2>八、D模型分析（非主线）</h2>
+
+<div class="box">
+目标不是优化D，而是证明：
+<b>action-dependent risk introduces noise</b>
+</div>
+
+---
+
+<h2>九、RL模块（非主线）</h2>
+
+<ul>
+<li>PPO baseline</li>
+<li>CVaR-PPO</li>
+<li>RCVaR-RL</li>
+</ul>
+
+<div class="box">
+结论：RL不参与主论文贡献，仅作为扩展实验
+</div>
+
+---
+
+<h2>十、输出文件规范（必须严格执行）</h2>
+
+<pre>
+outputs/
+    nav_curve.png
+    drawdown.png
+    cvar_table.csv
+    kappa_series.csv
+    rolling_results.csv
+</pre>
+
+---
+
+<h2>十一、论文最终结构</h2>
+
+<div class="box">
+
+1. RCVaR risk framework  
+2. κ(s) risk measure learning（核心贡献）  
+3. rolling optimization  
+4. empirical validation  
+5. D ablation  
+6. RL future work  
+
+</div>
+
+---
+
+<h2>十二、最终科研结论</h2>
+
+<div class="box">
+我们证明：  
+<b>风险度量本身可以随市场状态学习变化，并显著改善尾部风险控制。</b>
+</div>
+
+</body>
+</html>

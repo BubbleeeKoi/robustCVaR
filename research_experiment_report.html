@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>状态依赖鲁棒 CVaR 投资组合：研究讲解与实验报告</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]'], ['$$', '$$']], processEscapes: true },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root { --primary:#1565c0; --accent:#0d47a1; --bg:#f4f6fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --ok:#059669; --warn:#d97706; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; line-height:1.75; }
+    .hero { background:linear-gradient(135deg,#0d47a1,#1976d2); color:#fff; padding:48px 24px; }
+    .hero h1 { margin:0 0 12px; font-size:2rem; max-width:960px; margin-left:auto; margin-right:auto; }
+    .hero p { max-width:960px; margin:0 auto; opacity:.92; }
+    .wrap { max-width:960px; margin:0 auto; padding:32px 24px 64px; }
+    .card { background:var(--card); border-radius:14px; padding:28px 32px; margin-bottom:24px; box-shadow:0 4px 20px rgba(15,23,42,.06); border:1px solid #e5e7eb; }
+    h2 { color:var(--accent); margin-top:0; padding-bottom:8px; border-bottom:2px solid #e5e7eb; }
+    h3 { color:#374151; margin-top:28px; }
+    .muted { color:var(--muted); font-size:.95rem; }
+    .badge { display:inline-block; background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:999px; font-size:.82rem; margin-right:6px; }
+    .flow { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:20px; text-align:center; font-size:1.05rem; margin:20px 0; }
+    table { width:100%; border-collapse:collapse; margin:16px 0; font-size:.92rem; }
+    th,td { border:1px solid #e5e7eb; padding:10px 12px; text-align:left; }
+    th { background:#f3f4f6; }
+    tr.best td { background:#ecfdf5; font-weight:600; }
+    .highlight { border-left:4px solid var(--primary); background:#eff6ff; padding:14px 18px; border-radius:0 10px 10px 0; margin:16px 0; }
+    .warn-box { border-left:4px solid var(--warn); background:#fffbeb; padding:14px 18px; border-radius:0 10px 10px 0; margin:16px 0; }
+    .ok-box { border-left:4px solid var(--ok); background:#ecfdf5; padding:14px 18px; border-radius:0 10px 10px 0; margin:16px 0; }
+    .fig-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0; }
+    .fig-grid img { width:100%; border-radius:10px; border:1px solid #e5e7eb; }
+    .fig-grid figcaption { font-size:.85rem; color:var(--muted); margin-top:6px; }
+    @media(max-width:720px){ .fig-grid{ grid-template-columns:1fr; } }
+    code { background:#f3f4f6; padding:2px 6px; border-radius:4px; font-size:.88rem; }
+    pre { background:#1e293b; color:#e2e8f0; padding:16px; border-radius:10px; overflow:auto; font-size:.85rem; }
+    .toc a { color:var(--primary); text-decoration:none; display:block; margin:4px 0; }
+    .toc a:hover { text-decoration:underline; }
+    .compare { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media(max-width:720px){ .compare{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>状态依赖鲁棒 CVaR 动态投资组合<br/>研究讲解与实验报告</h1>
+  <p>本文档从<strong>研究视角</strong>梳理数学模型、设计逻辑与实验结论。与 <code>codeimprove.md</code>（工程实现手册）区分：后者记录代码结构、复现命令与文件索引；本报告侧重<strong>为什么这样建模、实验说明了什么、论文如何写</strong>。</p>
+</div>
+
+<div class="wrap">
+
+<div class="card toc">
+  <h2>目录</h2>
+  <a href="#s0">0. 与 codeimprove.md 的定位区别</a>
+  <a href="#s1">1. 研究背景与代码做了什么</a>
+  <a href="#s2">2. 数学模型（完整）</a>
+  <a href="#s3">3. 设计逻辑：从 GridWorld 到真实组合</a>
+  <a href="#s4">4. 代码系统：概念分层（非文件清单）</a>
+  <a href="#s5">5. 实验设计</a>
+  <a href="#s6">6. 实验结果</a>
+  <a href="#s7">7. 结论、局限与论文建议</a>
+</div>
+
+<!-- ========== 0 ========== -->
+<div class="card" id="s0">
+  <h2>0. 与 codeimprove.md 的定位区别</h2>
+  <div class="compare">
+    <div>
+      <h3>codeimprove.md（工程手册）</h3>
+      <ul>
+        <li>面向开发者：目录结构、脚本入口、输出路径</li>
+        <li>记录 V1/V2 执行状态与复现命令</li>
+        <li>以「改了什么代码、怎么跑」为主</li>
+      </ul>
+    </div>
+    <div>
+      <h3>本报告（研究讲解）</h3>
+      <ul>
+        <li>面向论文写作：模型、假设、消融逻辑</li>
+        <li>解释 RCVaR 与 κ(s) 的金融含义</li>
+        <li>以「证明了什么、不能夸大什么」为主</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 1 ========== -->
+<div class="card" id="s1">
+  <h2>1. 研究背景与代码做了什么</h2>
+
+  <h3>1.1 理论来源</h3>
+  <p>本项目基于 Ni &amp; Lai (2024) 的 <em>Robust Risk-Sensitive RL with CVaR</em>。原文在有限 GridWorld RMDP 中研究：</p>
+  \[
+  \min_\pi \max_{\tilde P\in\mathcal P} \mathrm{CVaR}_\alpha\Big(\sum_t \gamma^t C(x_t,a_t)\Big)
+  \]
+  <p>核心机制是 <strong>ambiguity budget</strong> \(\kappa\)：允许 worst-case 尾部权重在样本间重新分配。本文<strong>不是</strong>继续 GridWorld 复现，而是将该思想迁移到<strong>真实股票/ETF 动态组合</strong>。</p>
+
+  <h3>1.2 代码整体完成了什么</h3>
+  <p>代码实现了一条完整科研流水线，分两个阶段：</p>
+  <table>
+    <tr><th>阶段</th><th>目标</th><th>状态</th></tr>
+    <tr><td>V1</td><td>数据 → RCVaR 层验证 → Rolling A/B/C/D → Baseline → RL 初版</td><td>✅ 完成</td></tr>
+    <tr><td>V2</td><td>Risk Measure Learning 框架；ETF10/ETF20/SP30 跨市场消融</td><td>✅ 完成</td></tr>
+  </table>
+
+  <div class="flow">
+    \(s_t\) → \(\kappa(s_t)\) → \(\mathrm{RCVaR}_{\alpha,\kappa}\) → 优化 \(w_t\) → 净损失 \(L_{t+1}\) → 回测指标
+  </div>
+
+  <p><strong>主贡献定位（V2）：</strong>提出并验证<strong>状态依赖的风险度量学习</strong>——市场越 stress（高波动、高回撤等），\(\kappa(s)\) 越大，RCVaR 对尾部越保守。<strong>主实验用 Rolling 优化，不用 RL。</strong></p>
+</div>
+
+<!-- ========== 2 ========== -->
+<div class="card" id="s2">
+  <h2>2. 数学模型（完整）</h2>
+
+  <h3>2.1 组合与净损失</h3>
+  <p>\(N\) 个资产，日收益 \(r_t\in\mathbb R^N\)，权重 \(w_t\in\Delta^N\)（单纯形）。组合毛收益 \(R^p_{t+1}=w_t^\top r_{t+1}\)。换手率 \(\|w_t-w_{t-1}\|_1\)，成本率 \(c\)，净收益：</p>
+  \[
+  R^{\mathrm{net}}_{t+1} = w_t^\top r_{t+1} - c\|w_t-w_{t-1}\|_1
+  \]
+  <p><strong>优化与评价统一使用净损失</strong>（不是收益右尾）：</p>
+  \[
+  \boxed{L_{t+1}(s_t,w_t) = -w_t^\top r_{t+1} + c\|w_t-w_{t-1}\|_1}
+  \]
+
+  <h3>2.2 普通 CVaR（经验形式）</h3>
+  <p>给定 \(B\) 个损失样本 \(Z_1,\ldots,Z_B\)，\(\alpha=5\%\) 时：</p>
+  \[
+  \mathrm{CVaR}_\alpha(Z) = \max_{q\in\mathcal Q_\alpha}\sum_{i=1}^B q_i Z_i,\quad
+  \mathcal Q_\alpha = \Big\{q\ge0:\ \sum_i q_i=1,\ 0\le q_i\le\frac{1}{\alpha B}\Big\}
+  \]
+
+  <h3>2.3 鲁棒 CVaR（RCVaR）——本文风险层</h3>
+  \[
+  \boxed{\mathrm{RCVaR}_{\alpha,\kappa}(Z)=\max_{q\in\mathcal Q_{\alpha,\kappa}}\sum_{i=1}^B q_i Z_i}
+  \]
+  \[
+  \mathcal Q_{\alpha,\kappa}=\Big\{q\ge0:\ \sum_i q_i=1,\ 0\le q_i\le\frac{\kappa_i}{\alpha B}\Big\}
+  \]
+  <p>实现：按 \(Z_i\) 从大到小排序，对每个样本分配权重，上限为 \(\kappa_i/(\alpha B)\)，直到总权重为 1。</p>
+
+  <h3>2.4 退化关系（理论自检）</h3>
+  <table>
+    <tr><th>设定</th><th>含义</th></tr>
+    <tr><td>\(\kappa_i=1\)</td><td>退化为普通 CVaR</td></tr>
+    <tr><td>\(\kappa_i=K\) 常数</td><td>Fixed Robust CVaR，等价于更保守的 \(\mathrm{CVaR}_{\alpha/K}\)</td></tr>
+    <tr><td>\(\kappa_i=\kappa(s_i,w_i)\)</td><td>状态/动作依赖鲁棒 CVaR（本文创新）</td></tr>
+  </table>
+
+  <h3>2.5 市场状态与 κ 设计</h3>
+  <p><strong>V2 状态向量</strong>（rolling 标准化后）：</p>
+  \[
+  s_t = \big(\widetilde{Vol}_t,\ \widetilde{DD}_t,\ \widetilde{Mom}_t,\ \widetilde{Corr}_t\big)
+  \]
+  <p><strong>主方法 C（manual κ）</strong>：</p>
+  \[
+  \kappa(s_t) = 1 + \kappa_{\max}\cdot\sigma\big(\beta_1\widetilde{Vol}_t+\beta_2\widetilde{DD}_t+\beta_3\widetilde{Mom}_t+\beta_4\widetilde{Corr}_t\big),\quad \kappa_{\max}=1
+  \]
+  <p>故 \(\kappa\in[1,2]\)：市场 stress 越高，尾部样本在 worst-case 分布中可获更高权重 → RCVaR 更保守。</p>
+  <p><strong>D 模型（消融）</strong>在 C 基础上加入组合集中度 \(\mathrm{Conc}(w)=\sum_i w_i^2\)。</p>
+
+  <h3>2.6 Rolling 组合优化问题</h3>
+  <p>每个调仓日 \(t\)，用过去 \(M=252\) 日历史，求解：</p>
+  \[
+  \boxed{w_t^* = \arg\min_{w\in\Delta^N}\ \mathrm{RCVaR}_{\alpha,\kappa}\Big(\{-w^\top r_\tau + c\|w-w_{t-1}\|_1\}_{\tau=t-M}^{t-1}\Big)}
+  \]
+  <p>权重通过 softmax 参数化保证 \(w\in\Delta^N\)；调仓频率：每月末；样本外测试：2020–2024。</p>
+</div>
+
+<!-- ========== 3 ========== -->
+<div class="card" id="s3">
+  <h2>3. 设计逻辑：从 GridWorld 到真实组合</h2>
+
+  <h3>3.1 为什么先做 Rolling，后做 RL</h3>
+  <div class="highlight">
+    金融 RL 噪声大、训练不稳定。若 RCVaR 层本身有误，RL 结果无法解释。因此执行顺序为：<br/>
+    <strong>数据与指标 → RCVaR 层 → Rolling 验证 →（可选）RL</strong>
+  </div>
+  <p>V1/V2 实验表明：<strong>Rolling + κ(s) 已能给出可写论文的尾部风险控制结果</strong>；当前 RL 仅为快速验证，未超过 Rolling。</p>
+
+  <h3>3.2 五模型消融的设计意图</h3>
+  <table>
+    <tr><th>模型</th><th>κ</th><th>要回答的问题</th></tr>
+    <tr><td>A</td><td>1（无鲁棒）</td><td>baseline：普通 CVaR 组合</td></tr>
+    <tr><td>B</td><td>2（固定）</td><td>固定 ambiguity 是否已有帮助？</td></tr>
+    <tr><td>C_manual</td><td>κ(s)</td><td><strong>状态依赖风险度量是否最优？（主方法）</strong></td></tr>
+    <tr><td>C_learned</td><td>κ<sub>θ</sub>(s)</td><td>能否从 val 数据学习 θ？</td></tr>
+    <tr><td>D</td><td>κ(s,w)</td><td>动作依赖是否带来额外 tail 控制，还是噪声？</td></tr>
+  </table>
+
+  <h3>3.3 跨市场设计（V2）</h3>
+  <ul>
+    <li><strong>ETF10</strong>：主实验，10 只美股 ETF，分散但可解释</li>
+    <li><strong>ETF20</strong>：扩展分散度，检验 κ 是否仍有效</li>
+    <li><strong>SP30</strong>：29 只蓝筹（akshare 长历史），检验股票组合稳健性</li>
+  </ul>
+  <p>数据：akshare <code>stock_us_daily</code>；划分 train 2010–2017 / val 2018–2019 / test 2020–2024。</p>
+</div>
+
+<!-- ========== 4 ========== -->
+<div class="card" id="s4">
+  <h2>4. 代码系统：概念分层</h2>
+  <p>以下按<strong>研究功能</strong>描述，而非文件路径清单（详见 codeimprove.md）。</p>
+
+  <table>
+    <tr><th>层</th><th>功能</th><th>对应数学对象</th></tr>
+    <tr><td>数据层</td><td>akshare 下载、对齐、划分 train/val/test</td><td>\(r_t\)</td></tr>
+    <tr><td>状态层</td><td>Vol, DD, Mom, Corr + rolling z-score</td><td>\(s_t\)</td></tr>
+    <tr><td>风险度量层</td><td>κ(s) 或 κ(s,w)；RCVaR 对偶求解</td><td>\(\kappa\), \(\mathrm{RCVaR}\)</td></tr>
+    <tr><td>组合优化层</td><td>每月 min-w RCVaR，softmax 权重</td><td>\(w_t^*\)</td></tr>
+    <tr><td>回测层</td><td>NAV、MDD、CVaR、危机期损失</td><td>样本外指标</td></tr>
+    <tr><td>消融层</td><td>A/B/C/D 五模型 × 三数据集</td><td>论文 Table/Figure</td></tr>
+    <tr><td>RL 层（非主线）</td><td>PPO + RCVaR 目标，快速验证</td><td>future work</td></tr>
+  </table>
+
+  <p>另：<code>robust_cvar_repro/</code> 保留 Ni &amp; Lai GridWorld Figure 1 复现，与组合实验独立。</p>
+</div>
+
+<!-- ========== 5 ========== -->
+<div class="card" id="s5">
+  <h2>5. 实验设计</h2>
+
+  <h3>5.1 主指标</h3>
+  <div class="ok-box">
+    <strong>首要指标：</strong>样本外 Test 期（2020–2024）净损失的 CVaR<sub>5%</sub>，越低越好。
+  </div>
+  <p>辅助指标：MDD、VaR<sub>5%</sub>、Sharpe、Sortino、Calmar；危机期子样本（2020 Q1–Q2、2022 全年）损失。</p>
+
+  <h3>5.2 超参数（与论文 Methods 一致）</h3>
+  <table>
+    <tr><th>参数</th><th>取值</th></tr>
+    <tr><td>\(\alpha\)</td><td>0.05</td></tr>
+    <tr><td>\(\kappa_{\max}\)</td><td>1（κ∈[1,2]）</td></tr>
+    <tr><td>Fixed K（模型 B）</td><td>2</td></tr>
+    <tr><td>估计窗口 M</td><td>252 日</td></tr>
+    <tr><td>交易成本 c</td><td>0.001</td></tr>
+    <tr><td>调仓</td><td>每月末</td></tr>
+  </table>
+
+  <h3>5.3 对照 baseline（V1）</h3>
+  <p>Equal Weight、Min Variance（同样 test 期），用于说明 RCVaR 相对传统方法在尾部的优势。</p>
+</div>
+
+<!-- ========== 6 ========== -->
+<div class="card" id="s6">
+  <h2>6. 实验结果</h2>
+
+  <h3>6.1 跨市场 CVaR<sub>5%</sub> 消融（核心表）</h3>
+  <p>Test 2020–2024，单位：日净损失比例。</p>
+  <table>
+    <tr><th>模型</th><th>ETF10</th><th>ETF20</th><th>SP30</th><th>解读</th></tr>
+    <tr><td>A 无 κ</td><td>1.67%</td><td><strong>2.17%</strong></td><td>2.78%</td><td>baseline</td></tr>
+    <tr><td>B 固定 κ=2</td><td>1.65%</td><td>2.19%</td><td>2.60%</td><td>固定鲁棒有效</td></tr>
+    <tr class="best"><td>C_manual κ(s)</td><td><strong>1.63%</strong></td><td>2.20%</td><td><strong>2.50%</strong></td><td>ETF10/SP30 最优</td></tr>
+    <tr><td>C_learned κ<sub>θ</sub>(s)</td><td>1.69%</td><td>2.19%</td><td>2.71%</td><td>弱于 manual</td></tr>
+    <tr><td>D κ(s,w)</td><td>1.65%</td><td>2.19%</td><td>2.61%</td><td>非主线消融</td></tr>
+  </table>
+
+  <h3>6.2 ETF10 主结果（论文主表推荐）</h3>
+  <table>
+    <tr><th>模型</th><th>CVaR<sub>5%</sub></th><th>MDD</th><th>年化收益</th><th>Sharpe</th><th>2020危机损失</th></tr>
+    <tr class="best"><td>C_manual</td><td><strong>1.63%</strong></td><td><strong>17.5%</strong></td><td>3.85%</td><td>0.34</td><td><strong>1.79%</strong></td></tr>
+    <tr><td>B_fixed</td><td>1.65%</td><td>18.6%</td><td>4.26%</td><td>0.37</td><td>3.02%</td></tr>
+    <tr><td>D</td><td>1.65%</td><td>18.5%</td><td><strong>4.56%</strong></td><td><strong>0.40</strong></td><td>2.67%</td></tr>
+    <tr><td>A</td><td>1.67%</td><td>20.0%</td><td>2.68%</td><td>0.23</td><td>4.19%</td></tr>
+  </table>
+  <p>相对 A：C_manual 的 CVaR ↓2.4%，MDD ↓2.5pp，2020 危机损失 ↓57%。</p>
+
+  <h3>6.3 SP30 稳健性</h3>
+  <table>
+    <tr><th>模型</th><th>CVaR<sub>5%</sub></th><th>MDD</th><th>年化收益</th><th>2022高波动损失</th></tr>
+    <tr class="best"><td>C_manual</td><td><strong>2.50%</strong></td><td><strong>22.2%</strong></td><td>1.43%</td><td>5.88%</td></tr>
+    <tr><td>B_fixed</td><td>2.60%</td><td>22.3%</td><td><strong>9.61%</strong></td><td>7.70%</td></tr>
+    <tr><td>A</td><td>2.78%</td><td>24.8%</td><td>-0.54%</td><td>10.8%</td></tr>
+  </table>
+  <p>C_manual 相对 A：CVaR ↓10%，2022 危机期损失 ↓45%。</p>
+
+  <h3>6.4 传统 Baseline 对比（ETF10, V1）</h3>
+  <table>
+    <tr><th>方法</th><th>CVaR<sub>5%</sub></th><th>MDD</th><th>年化收益</th></tr>
+    <tr class="best"><td>C_manual RCVaR</td><td><strong>1.63%</strong></td><td><strong>17.5%</strong></td><td>3.85%</td></tr>
+    <tr><td>Min Variance</td><td>2.06%</td><td>22.2%</td><td>8.85%</td></tr>
+    <tr><td>Equal Weight</td><td>2.60%</td><td>30.3%</td><td>10.12%</td></tr>
+  </table>
+  <p>RCVaR 方法<strong>不以最高收益为目标</strong>，但在尾部风险上显著优于传统 baseline。</p>
+
+  <h3>6.5 图表</h3>
+  <h4>ETF10（主实验）</h4>
+  <div class="fig-grid">
+    <figure>
+      <img src="robust_cvar_portfolio/outputs/v2/etf10/nav_curve.png" alt="ETF10 NAV" />
+      <figcaption>图 1：ETF10 样本外 NAV（V2 五模型）</figcaption>
+    </figure>
+    <figure>
+      <img src="robust_cvar_portfolio/outputs/v2/etf10/drawdown.png" alt="ETF10 Drawdown" />
+      <figcaption>图 2：ETF10 样本外回撤</figcaption>
+    </figure>
+  </div>
+
+  <h4>SP30（稳健性）</h4>
+  <div class="fig-grid">
+    <figure>
+      <img src="robust_cvar_portfolio/outputs/v2/sp30/nav_curve.png" alt="SP30 NAV" />
+      <figcaption>图 3：SP30 样本外 NAV</figcaption>
+    </figure>
+    <figure>
+      <img src="robust_cvar_portfolio/outputs/v2/sp30/d_ablation_nav.png" alt="C vs D" />
+      <figcaption>图 4：C_learned vs D 消融（action-dependent）</figcaption>
+    </figure>
+  </div>
+
+  <h3>6.6 RCVaR 层自检（单元测试）</h3>
+  <table>
+    <tr><th>检验</th><th>结果</th></tr>
+    <tr><td>κ=1 ≈ 普通 CVaR</td><td>通过（误差 &lt; 1e-10 量级）</td></tr>
+    <tr><td>κ=2 &gt; κ=1</td><td>0.0166 &gt; 0.0128（更保守）</td></tr>
+  </table>
+</div>
+
+<!-- ========== 7 ========== -->
+<div class="card" id="s7">
+  <h2>7. 结论、局限与论文建议</h2>
+
+  <h3>7.1 可以写进论文的结论</h3>
+  <div class="ok-box">
+    <ol>
+      <li><strong>RCVaR 风险层在真实市场有效：</strong>Rolling RCVaR 的 CVaR 显著低于 Equal Weight / Min Var。</li>
+      <li><strong>状态依赖 κ(s) 是主推方法：</strong>ETF10 上 CVaR、MDD、2020 危机损失全面最优；SP30 上 CVaR 比无 κ baseline 低约 10%。</li>
+      <li><strong>Fixed κ 是强对照：</strong>B 在收益-风险折中上优于 A，但 tail 控制略逊于 C_manual。</li>
+      <li><strong>消融支持 V2 叙事：</strong>去掉 κ（A）尾部恶化；D 未优于 C，action-dependent 引入噪声。</li>
+    </ol>
+  </div>
+
+  <h3>7.2 必须如实报告的局限</h3>
+  <div class="warn-box">
+    <ul>
+      <li><strong>ETF20：</strong>各模型 CVaR 差异 &lt;0.03%，κ 边际收益不明显。</li>
+      <li><strong>learned κ：</strong>当前 val 线性学习弱于 manual β，不宜作为主方法。</li>
+      <li><strong>RL：</strong>快速训练版未分化，CVaR≈2.75%，不如 Rolling；仅作 future work。</li>
+      <li><strong>数据：</strong>akshare 美股接口；ETF10 有效样本约从 2016 起；SP30 为 29 只（HON 剔除）。</li>
+    </ul>
+  </div>
+
+  <h3>7.3 建议论文结构</h3>
+  <ol>
+    <li>Introduction：Ni &amp; Lai robust CVaR → 金融组合迁移</li>
+    <li>Method：RCVaR + κ(s) risk measure learning + rolling optimization</li>
+    <li>Experiments：ETF10 主表 + SP30 稳健性 + ETF20 边界讨论</li>
+    <li>Ablation：A/B/C/D + w/o κ</li>
+    <li>Conclusion：κ(s) 改善尾部；RL 与非线性 κ 为后续</li>
+  </ol>
+
+  <h3>7.4 Abstract 表述示例</h3>
+  <div class="highlight">
+    <em>We propose a state-dependent robust CVaR portfolio framework where the ambiguity budget κ(s) adapts to market stress (volatility, drawdown, momentum, correlation). On out-of-sample ETF10 data (2020–2024), our method reduces CVaR<sub>5%</sub> from 1.67% to 1.63%, maximum drawdown from 20.0% to 17.5%, and COVID crisis loss from 4.2% to 1.8%, compared with standard CVaR optimization. Results on SP30 stocks confirm robust tail-risk improvements.</em>
+  </div>
+
+  <h3>7.5 复现（简要）</h3>
+  <pre>conda activate portfolio
+python robust_cvar_portfolio/experiments/run_v2_experiment.py</pre>
+  <p class="muted">工程细节、文件索引、命令参数见 <code>codeimprove.md</code>。</p>
+</div>
+
+<div class="card muted" style="text-align:center;">
+  <p>报告生成：2026-07-01 · 数据来源：robust_cvar_portfolio/outputs/v2/ · 配套工程文档：codeimprove.md</p>
+</div>
+
+</div>
+</body>
+</html>

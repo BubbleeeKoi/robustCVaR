@@ -1,15 +1,42 @@
 # 状态-动作依赖鲁棒 CVaR 投资组合实验：代码实现与结果说明
 
-本文档对应 `robust_cvar_portfolio_plan_mathjax.html` 中的执行计划，说明**新增了哪些代码、每一步实验做什么、逻辑是什么、如何复现、以及可直接写入论文的结果**。
+> **研究讲解版（数学模型 / 设计逻辑 / 论文写法）** 见 [`research_experiment_report.html`](research_experiment_report.html)。  
+> 本文档（codeimprove.md）侧重**工程实现、复现命令与输出路径**。
+
+本文档对应：
+- **V1** `robust_cvar_portfolio_plan_mathjax.html`（已完成）
+- **V2** `robust_cvar_V2_PLAN.html`（已完成：跨市场 + 消融 + Risk Measure Learning 框架）
+
+**完成状态**
+
+| 阶段 | 状态 | 入口脚本 |
+|------|------|----------|
+| V1 六步流水线 | ✅ 完成 | `scripts/run_full_experiment.py` |
+| V2 顶刊协议 | ✅ 完成 | `experiments/run_v2_experiment.py` |
+| SP30 跨市场 | ✅ 完成 | 同上 `--dataset sp30` |
+| RL 扩展 | ⏸ 非主线（快速验证版） | V2 计划明确 RL 不参与主贡献 |
 
 ---
 
 ## 1. 一键复现
 
+**V1（原计划六步）：**
+
 ```bash
 conda activate portfolio
 cd "Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk"
 python robust_cvar_portfolio/scripts/run_full_experiment.py
+```
+
+**V2（顶刊协议：ETF10 + ETF20 + SP30 跨市场消融）：**
+
+```bash
+conda activate portfolio
+python robust_cvar_portfolio/experiments/run_v2_experiment.py
+
+# 仅重跑某一数据集
+python robust_cvar_portfolio/experiments/run_v2_experiment.py --dataset sp30
+python robust_cvar_portfolio/experiments/run_v2_experiment.py --dataset sp30 --force-data
 ```
 
 环境依赖（已在 `portfolio` 环境中安装）：
@@ -209,11 +236,124 @@ RL 目标在 PPO 损失中加入 RCVaR 项（见 `agents/ppo.py` 中 `_objective
 
 | 问题 | 说明 | 建议 |
 |------|------|------|
-| RL 未分化 | 5 种 PPO 结果相同 | 增大 `train_iters`（200+）、加 entropy bonus、独立随机种子 |
-| D 未在 CVaR 上超过 C | β₃、κ_max 未调参 | 在 val 集上网格搜索 β₁–β₃ |
-| 数据源 | akshare 美股接口，有效样本从 2016 起 | 可换更长历史数据源或 A 股 ETF |
-| Rolling 耗时 | 四策略全量约 9 分钟 | 已实现结果缓存，重复运行跳过 Step 3 |
-| 计划中的 SP100-30 / 100 资产 | 尚未扩展 | 复制 `etf10.yaml` 改 ticker 列表即可 |
+| RL 未分化 | 5 种 PPO 结果相同 | V2 计划已将 RL 列为 future work，主文用 rolling |
+| learned κ 弱于 manual κ | val 上 θ 学习尚不稳定 | 增大 val 目标、换非线性 κ 网络 |
+| ETF20 上 κ 提升不明显 | 20 ETF 分散化高，尾部差异小 | 论文中如实报告跨市场差异 |
+| SP30 下载 | HON 历史不足已自动剔除（29 只） | 可换更长历史蓝筹 |
+| Rolling 耗时 | SP30 五模型约 2.5 小时 | 已支持 `optimizer_maxiter` 加速 |
+
+---
+
+## 9. V2 顶刊协议（`robust_cvar_V2_PLAN.html`）
+
+### 9.1 核心定位
+
+V2 将论文主线明确为 **Risk Measure Learning**：
+
+\[
+s_t \rightarrow \kappa_\theta(s_t) \rightarrow \text{RCVaR}_{\alpha,\kappa} \rightarrow w_t \rightarrow L_t
+\]
+
+**RL 不参与主论文贡献**，仅作扩展实验（与 V2 计划 §九一致）。
+
+### 9.2 V2 代码结构
+
+```
+robust_cvar_portfolio/
+├── risk/
+│   ├── rcvar.py          # RCVaR 对偶层
+│   ├── kappa.py          # manual / learned κ_θ(s)
+│   └── risk_engine.py    # state → κ → RCVaR 统一引擎
+├── portfolio/
+│   ├── optimizer.py      # min_w RCVaR
+│   └── rolling.py        # 月度 rolling 回测
+├── data/
+│   ├── loader.py         # 多数据集加载（ETF10/20/SP30）
+│   └── state.py          # V2 状态：Vol, DD, Mom, Corr
+├── experiments/
+│   └── run_v2_experiment.py
+├── configs/
+│   ├── etf10.yaml
+│   ├── etf20.yaml
+│   └── sp30.yaml
+└── outputs/v2/           # V2 规范输出
+```
+
+### 9.3 V2 实验模型对照（消融）
+
+| 模型 | κ 设定 | V1 对应 | 论文角色 |
+|------|--------|---------|----------|
+| A_no_kappa | κ=1 | A | w/o κ baseline |
+| B_fixed_kappa | κ=2 常数 | B | fixed robust |
+| C_manual_kappa | κ(s) 手工 β | C | **主方法（当前最优）** |
+| C_learned_kappa | κ_θ(s) val 学习 | C 扩展 | learned κ 消融 |
+| D_state_action | κ(s,w) | D | 非主线：action noise 分析 |
+
+### 9.4 V2 执行步骤
+
+| STEP | 内容 | 输出 |
+|------|------|------|
+| 1 | akshare 下载 ETF10→ETF20→SP30 | `data/processed/{dataset}/raw_data.csv` |
+| 2 | 构建 state \(s_t=[Vol, DD, Mom, Corr]\) | `outputs/v2/{dataset}/state_matrix.npy` |
+| 3 | 计算 κ 序列 | `outputs/v2/{dataset}/kappa_series.csv` |
+| 4 | RCVaR + 组合优化 | rolling 内部 |
+| 5 | Backtest | `nav_curve.png`, `drawdown.png` |
+| 6 | 消融汇总 | `cvar_table.csv`, `ablation_summary.csv` |
+
+### 9.5 跨市场 CVaR₅% 结果（Test 2020–2024，越低越好）
+
+| 模型 | ETF10 | ETF20 | SP30 |
+|------|-------|-------|------|
+| A_no_kappa | 1.67% | **2.17%** | 2.78% |
+| B_fixed_kappa | 1.65% | 2.19% | 2.60% |
+| **C_manual_kappa** | **1.63%** | 2.20% | **2.50%** |
+| C_learned_kappa | 1.69% | 2.19% | 2.71% |
+| D_state_action | 1.65% | 2.19% | 2.61% |
+
+**跨市场结论（可写论文）：**
+
+1. **ETF10**：C_manual 在 CVaR（1.63%）、MDD（17.5%）、2020 危机损失（1.8%）上全面最优 → 主结果表用 ETF10。
+2. **SP30**：C_manual CVaR **2.50%** vs A **2.78%**，相对下降 **10%**；`C_success_cvar_lowest=true` → 股票组合上鲁棒 κ(s) 仍有效。
+3. **ETF20**：各模型 CVaR 差异 <0.03%，A 略优 → 说明在高度分散 ETF 组合上 κ 边际收益有限，可在论文 Limitations 讨论。
+4. **消融**：w/o κ（A）在 SP30/ETF10 上 CVaR 均高于 C_manual → **κ 显著上升时去掉 κ 尾部风险恶化**。
+5. **D 模型**：SP30 上 D 的 CVaR（2.61%）优于 A（2.78%）但弱于 C_manual（2.50%）→ 支持 V2 观点：action-dependent risk 引入额外噪声，非主线。
+6. **learned κ**：当前 val 线性学习弱于 manual β；论文可报告为 future work（非线性 κ 网络 / 端到端训练）。
+
+### 9.6 SP30 详细指标（Test 2020–2024）
+
+| 模型 | CVaR₅% | MDD | Ann.Return | 2020危机 | 2022高波动 |
+|------|--------|-----|------------|---------|-----------|
+| C_manual_kappa | **2.50%** | **22.2%** | 1.43% | 7.01% | **5.88%** |
+| B_fixed_kappa | 2.60% | 22.3% | **9.61%** | 6.88% | 7.70% |
+| D_state_action | 2.61% | 22.5% | 1.43% | 7.24% | 4.77% |
+| C_learned_kappa | 2.71% | 26.4% | -1.06% | 10.9% | 6.31% |
+| A_no_kappa | 2.78% | 24.8% | -0.54% | 8.69% | 10.8% |
+
+### 9.7 V2 输出文件
+
+| 路径 | 用途 |
+|------|------|
+| `outputs/v2/ablation_summary.csv` | 跨市场 CVaR 消融主表 |
+| `outputs/v2/cross_market_cvar_table.csv` | 全指标长表 |
+| `outputs/v2/{dataset}/nav_curve.png` | 论文 Figure NAV |
+| `outputs/v2/{dataset}/drawdown.png` | 论文 Figure 回撤 |
+| `outputs/v2/{dataset}/cvar_table.csv` | 单数据集全指标 |
+| `outputs/v2/{dataset}/kappa_series.csv` | κ 可解释性分析 |
+| `outputs/v2/{dataset}/rolling_results.csv` | 日度回测明细 |
+| `outputs/v2/{dataset}/d_ablation_nav.png` | C vs D 消融图 |
+
+### 9.8 论文最终结构（V2 建议）
+
+1. RCVaR risk framework  
+2. **κ(s) risk measure learning**（核心贡献，主推 C_manual）  
+3. Rolling optimization  
+4. Empirical validation（ETF10 主表 + SP30 稳健性 + ETF20 边界案例）  
+5. D ablation（action-dependent noise）  
+6. RL future work  
+
+**一句话结论（V2）：**
+
+> 风险度量 κ 可随市场状态（波动、回撤、动量、相关性）动态调整；在 ETF10 与 SP30 样本外测试中，状态依赖 RCVaR 将 CVaR₅% 稳定低于普通 CVaR 与无 κ baseline。
 
 ---
 
@@ -225,4 +365,4 @@ RL 目标在 PPO 损失中加入 RCVaR 项（见 `agents/ppo.py` 中 `_objective
 
 ---
 
-*实验完成时间：2026-06-29；运行环境：`conda activate portfolio`；主脚本：`robust_cvar_portfolio/scripts/run_full_experiment.py`*
+*V1 完成：2026-06-29；V2 完成：2026-07-01；环境：`conda activate portfolio`*

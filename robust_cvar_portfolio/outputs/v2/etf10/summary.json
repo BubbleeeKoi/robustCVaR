@@ -1,0 +1,12 @@
+{
+  "dataset": "etf10",
+  "learned_theta": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "best_cvar_model": "C_manual_kappa",
+  "C_success": false,
+  "elapsed_sec": 884.894241809845
+}

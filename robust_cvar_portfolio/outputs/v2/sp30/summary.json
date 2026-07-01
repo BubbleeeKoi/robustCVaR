@@ -1,0 +1,15 @@
+{
+  "dataset": "sp30",
+  "learned_theta": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "best_cvar_model": "C_manual_kappa",
+  "C_manual_cvar": 0.025031513586067533,
+  "C_learned_cvar": 0.027058522093564106,
+  "A_cvar": 0.027762201521427114,
+  "C_success_cvar_lowest": true,
+  "elapsed_sec": 9083.832303524017
+}
