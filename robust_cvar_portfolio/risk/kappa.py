@@ -79,7 +79,7 @@ def kappa_vector_for_losses_v2(
     params: KappaParams,
     fixed_k: float = 2.0,
 ) -> np.ndarray:
-    if mode == "plain":
+    if mode in {"plain", "plain_frac", "plain_ceil"}:
         return np.ones(len(features), dtype=float)
     if mode == "fixed":
         return np.full(len(features), fixed_k, dtype=float)

@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>SP100 诊断实验计划：先诊断再改模型</title>
+
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+body{
+    font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    max-width: 1120px;
+    margin: 40px auto;
+    padding: 0 24px;
+    line-height: 1.75;
+    color: #222;
+}
+h1{border-bottom: 3px solid #b71c1c; padding-bottom: 12px;}
+h2{margin-top: 38px; border-left: 6px solid #b71c1c; padding-left: 12px;}
+h3{color:#7f1d1d; margin-top:26px;}
+table{border-collapse: collapse; width:100%; margin:16px 0;}
+th,td{border:1px solid #ccc; padding:8px 10px; vertical-align:top;}
+th{background:#f8eeee;}
+pre, code{background:#f5f5f5; border-radius:4px;}
+code{padding:2px 4px;}
+pre{padding:14px; overflow-x:auto;}
+.box{background:#f7f7f7; border-left:5px solid #555; padding:14px 18px; margin:18px 0;}
+.warn{background:#fff7e6; border-left:5px solid #f59e0b; padding:14px 18px; margin:18px 0;}
+.good{background:#ecfdf5; border-left:5px solid #10b981; padding:14px 18px; margin:18px 0;}
+.bad{background:#fef2f2; border-left:5px solid #dc2626; padding:14px 18px; margin:18px 0;}
+.small{color:#666; font-size:0.94em;}
+</style>
+</head>
+
+<body>
+
+<h1>SP100 诊断实验计划：先诊断再改模型</h1>
+
+<div class="box">
+<b>当前结论：</b> V3 SP100 主实验中，$C_{\text{manual}}$ 没有通过成功标准：
+$$
+CVaR(C_{\text{manual}})=2.92\% > CVaR(A)=2.86\%.
+$$
+但是 $B_{\text{fixed}}(\kappa=2)$ 表现较好：
+$$
+CVaR(B_{\text{fixed}})=2.66\%.
+$$
+说明问题不一定是 RCVaR 风险层失效，而更可能是 <b>手工状态映射 $\kappa(s)$ 在 SP100 上失效</b>。
+</div>
+
+<div class="warn">
+<b>本阶段原则：</b> 先不要马上改模型，不要直接调参找最好结果。先做诊断实验，回答：
+<br><br>
+$$
+\boxed{
+C_{\text{manual}}\text{ 为什么在 SP100 中失败？}
+}
+$$
+</div>
+
+<h2>0. 当前 V3 结果定位</h2>
+
+<table>
+<tr>
+<th>方法</th>
+<th>SP100 CVaR$_{5\%}$</th>
+<th>解释</th>
+</tr>
+<tr>
+<td>Historical CVaR</td>
+<td><b>2.46%</b></td>
+<td>传统强 baseline 最优，说明当前方法还没有超过强基线。</td>
+</tr>
+<tr>
+<td>B_fixed $\kappa=2$</td>
+<td><b>2.66%</b></td>
+<td>RCVaR 消融中最优，说明固定鲁棒风险包络仍然有用。</td>
+</tr>
+<tr>
+<td>A $\kappa=1$</td>
+<td>2.86%</td>
+<td>普通 CVaR baseline。</td>
+</tr>
+<tr>
+<td>C_manual $\kappa(s)$</td>
+<td>2.92%</td>
+<td>状态依赖手工 $\kappa(s)$ 未通过主成功标准。</td>
+</tr>
+</table>
+
+<h3>0.1 诊断目标</h3>
+
+<p>诊断阶段要回答五个问题：</p>
+
+<ol>
+<li>$\kappa(s)$ 在 SP100 上是否响应错误？</li>
+<li>$C_{\text{manual}}$ 是否导致权重更集中？</li>
+<li>$C_{\text{manual}}$ 是否换手更高？</li>
+<li>$C_{\text{manual}}$ 是否产生不合理行业暴露？</li>
+<li>$\kappa_{\max}$ 是否过大，导致过度鲁棒？</li>
+</ol>
+
+<h3>0.2 本阶段输出总目录</h3>
+
+<pre><code>robust_cvar_portfolio/outputs/v3/sp100_diagnostics/
+    diagnostic_summary.csv
+    diagnostic_summary.md
+
+    kappa_diagnostics/
+    weights_diagnostics/
+    turnover_diagnostics/
+    sector_diagnostics/
+    kappa_sensitivity/
+    q_weight_diagnostics/
+    window_sensitivity/
+
+    figures/
+        fig_kappa_timeseries.png
+        fig_kappa_vs_vol_dd.png
+        fig_weight_concentration.png
+        fig_turnover_comparison.png
+        fig_sector_exposure_heatmap.png
+        fig_kappa_max_sensitivity.png
+        fig_q_concentration.png
+        fig_window_sensitivity.png
+</code></pre>
+
+<h2>1. 诊断实验一：$\kappa(s)$ 时间序列诊断</h2>
+
+<h3>1.1 为什么做？</h3>
+
+<p>
+$C_{\text{manual}}$ 的核心是 $\kappa(s)$。如果 $\kappa(s)$ 在危机期不上升，或者正常时期长期过高，那么它就不是有效的 market stress mapping。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+\kappa(s_t)\text{ 是否真的在高波动、高回撤、危机阶段升高？}
+}
+$$
+</div>
+
+<h3>1.2 输入数据</h3>
+
+<pre><code>robust_cvar_portfolio/outputs/v3/sp100/kappa_series.csv
+robust_cvar_portfolio/outputs/v3/sp100/state_matrix.npy
+robust_cvar_portfolio/outputs/v3/sp100/rolling_results.csv
+</code></pre>
+
+<h3>1.3 需要计算什么？</h3>
+
+<table>
+<tr>
+<th>指标</th>
+<th>公式 / 逻辑</th>
+<th>作用</th>
+</tr>
+<tr>
+<td>$\bar{\kappa}$</td>
+<td>所有调仓日 $\kappa_t$ 的均值</td>
+<td>判断平均鲁棒程度是否过高。</td>
+</tr>
+<tr>
+<td>$\min \kappa_t,\max \kappa_t$</td>
+<td>时间序列最小 / 最大值</td>
+<td>判断是否长期卡在边界。</td>
+</tr>
+<tr>
+<td>危机期均值</td>
+<td>2020、2022 子样本均值</td>
+<td>判断危机期 $\kappa$ 是否更高。</td>
+</tr>
+<tr>
+<td>正常期均值</td>
+<td>非 2020/2022 区间均值</td>
+<td>作为危机期对照。</td>
+</tr>
+<tr>
+<td>相关性</td>
+<td>$corr(\kappa_t,Vol_t)$，$corr(\kappa_t,DD_t)$</td>
+<td>检验 $\kappa$ 是否跟市场 stress 同向。</td>
+</tr>
+</table>
+
+<h3>1.4 推荐代码逻辑</h3>
+
+<pre><code>def diagnose_kappa(kappa_df):
+    summary = {}
+
+    summary["kappa_mean"] = kappa_df["kappa"].mean()
+    summary["kappa_min"] = kappa_df["kappa"].min()
+    summary["kappa_max"] = kappa_df["kappa"].max()
+    summary["kappa_std"] = kappa_df["kappa"].std()
+
+    summary["corr_kappa_vol"] = kappa_df["kappa"].corr(kappa_df["Vol_z"])
+    summary["corr_kappa_dd"] = kappa_df["kappa"].corr(kappa_df["DD_z"])
+    summary["corr_kappa_mom"] = kappa_df["kappa"].corr(kappa_df["Mom_z"])
+    summary["corr_kappa_corr"] = kappa_df["kappa"].corr(kappa_df["Corr_z"])
+
+    crisis_2020 = (kappa_df["date"] >= "2020-02-01") & (kappa_df["date"] <= "2020-06-30")
+    crisis_2022 = (kappa_df["date"] >= "2022-01-01") & (kappa_df["date"] <= "2022-12-31")
+
+    summary["kappa_2020_mean"] = kappa_df.loc[crisis_2020, "kappa"].mean()
+    summary["kappa_2022_mean"] = kappa_df.loc[crisis_2022, "kappa"].mean()
+    summary["kappa_normal_mean"] = kappa_df.loc[~(crisis_2020 | crisis_2022), "kappa"].mean()
+
+    return pd.Series(summary)
+</code></pre>
+
+<h3>1.5 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/kappa_diagnostics/kappa_summary.csv
+outputs/v3/sp100_diagnostics/kappa_diagnostics/kappa_state_correlation.csv
+outputs/v3/sp100_diagnostics/figures/fig_kappa_timeseries.png
+outputs/v3/sp100_diagnostics/figures/fig_kappa_vs_vol_dd.png
+</code></pre>
+
+<h3>1.6 如何判断结果？</h3>
+
+<table>
+<tr>
+<th>现象</th>
+<th>解释</th>
+<th>后续方向</th>
+</tr>
+<tr>
+<td>$\kappa$ 长期接近 2</td>
+<td>C 退化为近似固定高鲁棒，但仍差于 B，说明动态波动带来噪声。</td>
+<td>降低 $\kappa_{\max}$ 或平滑 $\kappa_t$。</td>
+</tr>
+<tr>
+<td>危机期 $\kappa$ 没有明显升高</td>
+<td>状态特征或 $\beta$ 方向失效。</td>
+<td>重新设计 stress features。</td>
+</tr>
+<tr>
+<td>$corr(\kappa,Vol)<0$ 或 $corr(\kappa,DD)<0$</td>
+<td>market stress mapping 方向错。</td>
+<td>检查标准化和 $\beta$ 符号。</td>
+</tr>
+<tr>
+<td>$\kappa$ 高频跳动</td>
+<td>风险度量不稳定，导致权重频繁变化。</td>
+<td>加入平滑或滞后。</td>
+</tr>
+</table>
+
+<div class="good">
+<b>诊断结果（2026-07-01，实验一已完成）</b>
+<table>
+<tr><th>指标</th><th>数值</th><th>判断</th></tr>
+<tr><td>$\bar{\kappa}$</td><td>1.427</td><td>平均鲁棒程度偏高（区间 [1,2] 的中上部）</td></tr>
+<tr><td>min / max</td><td>1.014 / 2.000</td><td>未长期卡死在边界；约 25% 交易日 $\kappa&gt;1.8$</td></tr>
+<tr><td>危机期均值</td><td>2020: 1.844；2022: 1.839</td><td>危机期明显高于正常期 1.265</td></tr>
+<tr><td>$corr(\kappa,Vol_z)$</td><td>+0.819</td><td>方向正确</td></tr>
+<tr><td>$corr(\kappa,DD_z)$</td><td>+0.779</td><td>方向正确</td></tr>
+<tr><td>$corr(\kappa,Mom_z)$</td><td>-0.231</td><td>高动量时 κ 略降，符合设计</td></tr>
+</table>
+<p><b>结论：</b> $\kappa(s)$ <b>不是</b>“响应方向错误”或“危机期不上升”。失败更可能来自：动态 κ 导致<b>换手与权重波动</b>（见实验二、三），而非 stress mapping 本身失效。</p>
+<p>输出：<code>outputs/v3/sp100_diagnostics/kappa_diagnostics/</code>，图 <code>figures/fig_kappa_timeseries.png</code></p>
+</div>
+
+<h2>2. 诊断实验二：权重集中度与权重距离诊断</h2>
+
+<h3>2.1 为什么做？</h3>
+
+<p>
+SP100 中 $C_{\text{manual}}$ 失败，可能不是因为风险层错误，而是因为它产生了更不稳定或更集中的组合权重。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 是否比 B_fixed 或 A 更集中、更不稳定？}
+}
+$$
+</div>
+
+<h3>2.2 输入数据</h3>
+
+<pre><code>outputs/v3/sp100/weights_A.csv
+outputs/v3/sp100/weights_B.csv
+outputs/v3/sp100/weights_C_manual.csv
+outputs/v3/sp100/weights_D.csv
+outputs/v3/sp100/weights_HistoricalCVaR.csv
+</code></pre>
+
+<h3>2.3 需要计算什么？</h3>
+
+<table>
+<tr>
+<th>指标</th>
+<th>公式</th>
+<th>解释</th>
+</tr>
+<tr>
+<td>HHI 集中度</td>
+<td>$HHI_t=\sum_i w_{i,t}^2$</td>
+<td>越高表示权重越集中。</td>
+</tr>
+<tr>
+<td>有效持仓数</td>
+<td>$N^{eff}_t=1/HHI_t$</td>
+<td>越低表示组合越集中。</td>
+</tr>
+<tr>
+<td>最大单资产权重</td>
+<td>$\max_i w_{i,t}$</td>
+<td>检验是否压到少数股票。</td>
+</tr>
+<tr>
+<td>C-B 权重距离</td>
+<td>$\|w^C_t-w^B_t\|_1$</td>
+<td>检验 C 与 fixed robust 的差异。</td>
+</tr>
+<tr>
+<td>C-A 权重距离</td>
+<td>$\|w^C_t-w^A_t\|_1$</td>
+<td>检验 C 与普通 CVaR 的差异。</td>
+</tr>
+</table>
+
+<h3>2.4 推荐代码逻辑</h3>
+
+<pre><code>def weight_diagnostics(weights_dict):
+    records = []
+
+    for name, W in weights_dict.items():
+        hhi = (W ** 2).sum(axis=1)
+        neff = 1.0 / hhi
+        maxw = W.max(axis=1)
+
+        tmp = pd.DataFrame({
+            "method": name,
+            "date": W.index,
+            "hhi": hhi.values,
+            "effective_n": neff.values,
+            "max_weight": maxw.values
+        })
+        records.append(tmp)
+
+    return pd.concat(records, ignore_index=True)
+
+def pairwise_weight_distance(W1, W2):
+    common_dates = W1.index.intersection(W2.index)
+    common_cols = W1.columns.intersection(W2.columns)
+    return (W1.loc[common_dates, common_cols] - W2.loc[common_dates, common_cols]).abs().sum(axis=1)
+</code></pre>
+
+<h3>2.5 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/weights_diagnostics/weight_concentration.csv
+outputs/v3/sp100_diagnostics/weights_diagnostics/weight_distance_C_vs_A.csv
+outputs/v3/sp100_diagnostics/weights_diagnostics/weight_distance_C_vs_B.csv
+outputs/v3/sp100_diagnostics/figures/fig_weight_concentration.png
+</code></pre>
+
+<div class="bad">
+<b>诊断结果（2026-07-01，实验二已完成）</b>
+<table>
+<tr><th>方法</th><th>平均 HHI</th><th>平均有效持仓 $N^{eff}$</th><th>平均最大单权重</th></tr>
+<tr><td>A_no_kappa</td><td>0.042</td><td>87.7</td><td>6.2%</td></tr>
+<tr><td>B_fixed_kappa</td><td>0.054</td><td>79.4</td><td>7.5%</td></tr>
+<tr><td>C_manual_kappa</td><td><b>0.069</b></td><td><b>70.3</b></td><td><b>10.6%</b></td></tr>
+<tr><td>Historical_CVaR</td><td>0.042</td><td>87.7</td><td>6.2%</td></tr>
+</table>
+<p>权重 L1 距离（调仓日平均）：$\|w^C-w^A\|_1=0.618$，$\|w^C-w^B\|_1=0.440$。</p>
+<p><b>结论：</b> C_manual 比 A/B 更<b>集中</b>（$N^{eff}$ 更低、最大权重更高）。支持“状态依赖 κ 诱导组合集中”这一失败机制。</p>
+</div>
+
+<h2>3. 诊断实验三：换手率与交易成本诊断</h2>
+
+<h3>3.1 为什么做？</h3>
+
+<p>
+$C_{\text{manual}}$ 的动态 $\kappa(s)$ 可能导致每月权重跳动更大，从而增加交易成本或样本外不稳定性。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 是否因为换手率更高而损害样本外表现？}
+}
+$$
+</div>
+
+<h3>3.2 需要计算什么？</h3>
+
+<table>
+<tr>
+<th>指标</th>
+<th>公式</th>
+<th>解释</th>
+</tr>
+<tr>
+<td>单期换手率</td>
+<td>$Turn_t=\|w_t-w_{t-1}\|_1$</td>
+<td>每次调仓变化幅度。</td>
+</tr>
+<tr>
+<td>平均换手率</td>
+<td>$\bar{Turn}$</td>
+<td>整体交易强度。</td>
+</tr>
+<tr>
+<td>累计换手率</td>
+<td>$\sum_t Turn_t$</td>
+<td>总交易强度。</td>
+</tr>
+<tr>
+<td>交易成本贡献</td>
+<td>$c\cdot Turn_t$</td>
+<td>成本是否拖累结果。</td>
+</tr>
+</table>
+
+<h3>3.3 推荐代码逻辑</h3>
+
+<pre><code>def compute_turnover(W):
+    turnover = W.diff().abs().sum(axis=1)
+    turnover.iloc[0] = W.iloc[0].abs().sum()
+    return turnover
+
+def turnover_diagnostics(weights_dict, cost_rate=0.001):
+    records = []
+    for name, W in weights_dict.items():
+        turn = compute_turnover(W)
+        tmp = pd.DataFrame({
+            "method": name,
+            "date": turn.index,
+            "turnover": turn.values,
+            "cost": cost_rate * turn.values
+        })
+        records.append(tmp)
+    return pd.concat(records, ignore_index=True)
+</code></pre>
+
+<h3>3.4 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/turnover_diagnostics/turnover_by_method.csv
+outputs/v3/sp100_diagnostics/turnover_diagnostics/turnover_summary.csv
+outputs/v3/sp100_diagnostics/figures/fig_turnover_comparison.png
+</code></pre>
+
+<div class="bad">
+<b>诊断结果（2026-07-01，实验三已完成）</b>
+<table>
+<tr><th>方法</th><th>平均换手率</th><th>累计换手率</th></tr>
+<tr><td>A_no_kappa</td><td>0.272</td><td>16.3</td></tr>
+<tr><td>B_fixed_kappa</td><td>0.335</td><td>20.1</td></tr>
+<tr><td>C_manual_kappa</td><td><b>0.607</b></td><td><b>36.4</b></td></tr>
+<tr><td>D_state_action</td><td>0.469</td><td>28.1</td></tr>
+</table>
+<p><b>结论：</b> C_manual 月均换手约为 A 的 <b>2.2 倍</b>、B 的 <b>1.8 倍</b>。动态 κ(s) 使优化目标月际变化更大，是样本外 CVaR 变差的重要机制（<b>supports_failure: yes</b>）。</p>
+</div>
+
+<h2>4. 诊断实验四：行业暴露诊断</h2>
+
+<h3>4.1 为什么做？</h3>
+
+<p>
+SP100 是股票池，不是 ETF。股票池的风险很大一部分来自行业集中。如果 C 在某些时段过度暴露到单一 sector，可能导致 CVaR 变差。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 是否产生了不合理的行业集中暴露？}
+}
+$$
+</div>
+
+<h3>4.2 输入数据</h3>
+
+<pre><code>weights_C_manual.csv
+weights_B.csv
+weights_HistoricalCVaR.csv
+data/processed/sp100/universe.csv
+</code></pre>
+
+<h3>4.3 行业暴露公式</h3>
+
+$$
+Exposure_{g,t}^{(m)}
+=
+\sum_{i\in g} w_{i,t}^{(m)}.
+$$
+
+<h3>4.4 推荐代码逻辑</h3>
+
+<pre><code>def sector_exposure(W, universe):
+    sectors = universe.set_index("ticker")["sector"]
+    common = W.columns.intersection(sectors.index)
+
+    W = W[common]
+    sectors = sectors.loc[common]
+
+    exposures = {}
+    for sector in sectors.unique():
+        tickers = sectors[sectors == sector].index
+        exposures[sector] = W[tickers].sum(axis=1)
+
+    return pd.DataFrame(exposures, index=W.index)
+
+def sector_diagnostics(W, universe):
+    E = sector_exposure(W, universe)
+    sector_hhi = (E ** 2).sum(axis=1)
+    max_sector = E.max(axis=1)
+    return E, pd.DataFrame({
+        "sector_hhi": sector_hhi,
+        "max_sector_exposure": max_sector
+    })
+</code></pre>
+
+<h3>4.5 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/sector_diagnostics/sector_exposure_C.csv
+outputs/v3/sp100_diagnostics/sector_diagnostics/sector_exposure_B.csv
+outputs/v3/sp100_diagnostics/sector_diagnostics/sector_exposure_HistoricalCVaR.csv
+outputs/v3/sp100_diagnostics/sector_diagnostics/sector_concentration_summary.csv
+outputs/v3/sp100_diagnostics/figures/fig_sector_exposure_heatmap.png
+</code></pre>
+
+<div class="warn">
+<b>诊断结果（2026-07-01，实验四已完成）</b>
+<table>
+<tr><th>方法</th><th>行业 HHI 均值</th><th>最大行业暴露均值</th><th>峰值</th></tr>
+<tr><td>C_manual</td><td>0.207</td><td>28.0%</td><td>51.7%（2021-02）</td></tr>
+<tr><td>B_fixed</td><td>0.194</td><td>26.2%</td><td>57.7%</td></tr>
+<tr><td>Historical CVaR</td><td>0.189</td><td>26.6%</td><td>73.2%（2020-04）</td></tr>
+</table>
+<p><b>结论：</b> C 的行业集中度略高于 B，但并非唯一最差；Historical CVaR 在 2020-04 出现更极端单行业暴露仍取得最优 CVaR。行业失衡是<b>次要</b>因素（supports_failure: unclear）。</p>
+</div>
+
+<h2>5. 诊断实验五：$\kappa_{\max}$ 敏感性诊断</h2>
+
+<h3>5.1 为什么做？</h3>
+
+<p>
+当前 C_manual 使用 $\kappa_{\max}=1$，因此 $\kappa(s)\in[1,2]$。SP100 中这可能过度鲁棒，放大历史尾部噪声。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 是否因为 }\kappa_{\max}\text{ 太大而过度保守？}
+}
+$$
+</div>
+
+<h3>5.2 实验设置</h3>
+
+$$
+\kappa_{\max}\in\{0.25,0.50,0.75,1.00,1.25,1.50\}.
+$$
+
+<h3>5.3 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/kappa_sensitivity/kappa_max_sensitivity_summary.csv
+outputs/v3/sp100_diagnostics/figures/fig_kappa_max_sensitivity.png
+</code></pre>
+
+<h3>5.4 判断逻辑</h3>
+
+<table>
+<tr>
+<th>现象</th>
+<th>解释</th>
+<th>后续方向</th>
+</tr>
+<tr>
+<td>$\kappa_{\max}=0.25$ 或 0.5 明显优于 1.0</td>
+<td>原 C 过度鲁棒，动态幅度太大。</td>
+<td>将主模型改为 weaker adaptive robustness。</td>
+</tr>
+<tr>
+<td>所有 $\kappa_{\max}$ 都弱于 A</td>
+<td>状态依赖机制在 SP100 上无效。</td>
+<td>考虑 asset/sector-aware $\kappa$。</td>
+</tr>
+<tr>
+<td>某个 $\kappa_{\max}$ 优于 B 或 A</td>
+<td>C 不是思想失败，而是参数未调好。</td>
+<td>用 validation set 选择 $\kappa_{\max}$。</td>
+</tr>
+</table>
+
+<div class="good">
+<b>诊断结果（2026-07-01，实验五已完成）</b>
+<table>
+<tr><th>$\kappa_{\max}$</th><th>CVaR$_{5\%}$ (test)</th><th>MDD</th><th>Sharpe</th></tr>
+<tr><td>0.50</td><td><b>2.68%</b></td><td>29.6%</td><td>0.24</td></tr>
+<tr><td>1.00（当前）</td><td>3.00%</td><td>35.7%</td><td>0.31</td></tr>
+<tr><td>1.50</td><td>2.92%</td><td>33.3%</td><td>0.33</td></tr>
+</table>
+<p>对照：A=2.86%，B_fixed=2.66%，Historical CVaR=2.46%。</p>
+<p><b>结论：</b> 降低 $\kappa_{\max}$ 至 <b>0.5</b> 时 C_manual CVaR 降至 2.68%，<b>优于 A 且接近 B</b>。当前默认 $\kappa_{\max}=1.0$ 在 SP100 上<b>过度鲁棒</b>（supports_failure: <b>yes</b>）。下一步应在 validation 集上选 $\kappa_{\max}\in[0.25,0.75]$ 并配合 κ 平滑。</p>
+<p>输出：<code>kappa_sensitivity/kappa_max_sensitivity_summary.csv</code>，图 <code>figures/fig_kappa_max_sensitivity.png</code></p>
+</div>
+
+<h2>6. 诊断实验六：Tail 样本贡献与 q 权重诊断</h2>
+
+<h3>6.1 为什么做？</h3>
+
+<p>
+RCVaR 的本质是对历史损失样本重新分配 worst-case 权重 $q_i$。如果 C 失败，可能是因为它把权重集中到了噪声性的极端样本，而不是稳定的系统性风险样本。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 的 worst-case }q\text{ 是否过度集中在少数历史极端样本上？}
+}
+$$
+</div>
+
+<h3>6.2 建议保存格式</h3>
+
+<pre><code>rebalance_date, scenario_date, method, loss, q, kappa
+2020-03-31, 2020-03-16, C_manual, 0.081, 0.36, 1.80
+</code></pre>
+
+<h3>6.3 需要计算什么？</h3>
+
+<table>
+<tr>
+<th>指标</th>
+<th>公式 / 逻辑</th>
+<th>解释</th>
+</tr>
+<tr>
+<td>q HHI</td>
+<td>$\sum_i q_i^2$</td>
+<td>越高表示 worst-case 分布越集中。</td>
+</tr>
+<tr>
+<td>top-k q 占比</td>
+<td>最大 1/3/5 个 q 的和</td>
+<td>检验是否极端集中。</td>
+</tr>
+<tr>
+<td>q 对应损失日期</td>
+<td>按 q 排序提取 scenario_date</td>
+<td>查看模型关注哪些历史情景。</td>
+</tr>
+<tr>
+<td>q-loss 相关</td>
+<td>$corr(q_i,Z_i)$</td>
+<td>检验 q 是否主要跟损失大小一致。</td>
+</tr>
+</table>
+
+<h3>6.4 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/q_weight_diagnostics/q_weights_A.csv
+outputs/v3/sp100_diagnostics/q_weight_diagnostics/q_weights_B.csv
+outputs/v3/sp100_diagnostics/q_weight_diagnostics/q_weights_C.csv
+outputs/v3/sp100_diagnostics/q_weight_diagnostics/q_weight_summary.csv
+outputs/v3/sp100_diagnostics/q_weight_diagnostics/top_q_scenarios.csv
+outputs/v3/sp100_diagnostics/figures/fig_q_concentration.png
+</code></pre>
+
+<div class="warn">
+<b>诊断结果（2026-07-01，实验六已完成）</b>
+<table>
+<tr><th>方法</th><th>q HHI 均值</th><th>top-1 q 占比</th><th>top-3 q 占比</th></tr>
+<tr><td>A_no_kappa</td><td>0.078</td><td>7.9%</td><td>23.8%</td></tr>
+<tr><td>B_fixed_kappa</td><td><b>0.153</b></td><td>15.9%</td><td>47.6%</td></tr>
+<tr><td>C_manual_kappa</td><td>0.129</td><td>15.1%</td><td>43.2%</td></tr>
+</table>
+<p><b>结论：</b> B 的 worst-case q 反而最集中，但 CVaR 最优；C 的 q 集中介于 A/B 之间。单纯“q 过度集中”不能解释 C 差于 B（supports_failure: no）。</p>
+</div>
+
+<h2>7. 诊断实验七：窗口长度 M 诊断</h2>
+
+<h3>7.1 为什么做？</h3>
+
+<p>
+SP100 中 $N=100$，当前窗口 $M=252$。高维股票池中尾部估计可能样本不足，因此需要测试更长窗口。
+</p>
+
+<div class="box">
+核心问题：
+$$
+\boxed{
+C_{\text{manual}}\text{ 是否因为 }M=252\text{ 太短而过拟合尾部样本？}
+}
+$$
+</div>
+
+<h3>7.2 实验设置</h3>
+
+$$
+M\in\{252,504,756\}.
+$$
+
+<h3>7.3 输出文件</h3>
+
+<pre><code>outputs/v3/sp100_diagnostics/window_sensitivity/window_sensitivity_summary.csv
+outputs/v3/sp100_diagnostics/figures/fig_window_sensitivity.png
+</code></pre>
+
+<div class="warn">
+<b>诊断结果（2026-07-01，实验七已完成）</b>
+<table>
+<tr><th>窗口 $M$</th><th>CVaR$_{5\%}$ (test)</th><th>Sharpe</th></tr>
+<tr><td>252（当前）</td><td><b>3.00%</b></td><td>0.31</td></tr>
+<tr><td>504</td><td>3.08%</td><td>0.34</td></tr>
+</table>
+<p><b>结论：</b> 延长窗口<b>未改善</b> CVaR（504 略差于 252）。尾部估计噪声的主因不是 $M$ 过短（supports_failure: <b>no</b>）。</p>
+<p>输出：<code>window_sensitivity/window_sensitivity_summary.csv</code></p>
+</div>
+
+<h2>8. 诊断汇总表设计</h2>
+
+<pre><code>outputs/v3/sp100_diagnostics/diagnostic_summary.csv
+</code></pre>
+
+<table>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+<tr><td>diagnostic_item</td><td>诊断项目名称，例如 kappa_response、turnover、sector_exposure。</td></tr>
+<tr><td>main_result</td><td>主要结果摘要。</td></tr>
+<tr><td>supports_failure_reason</td><td>是否支持该失败原因：yes/no/unclear。</td></tr>
+<tr><td>evidence_file</td><td>对应 csv 或 png 路径。</td></tr>
+<tr><td>next_action</td><td>如果成立，下一步该怎么改模型。</td></tr>
+</table>
+
+<div class="good">
+<b>诊断汇总（2026-07-01 全部完成）</b>
+<p>完整表：<code>outputs/v3/sp100_diagnostics/diagnostic_summary.csv</code></p>
+<table>
+<tr><th>诊断项</th><th>支持失败解释？</th><th>下一步</th></tr>
+<tr><td>κ(s) 响应</td><td><b>否</b></td><td>stress mapping 有效；不必重做特征</td></tr>
+<tr><td>权重集中</td><td><b>是</b></td><td>加 HHI / 单资产上限</td></tr>
+<tr><td>换手过高</td><td><b>是</b></td><td>κ 平滑、降低动态幅度</td></tr>
+<tr><td>行业暴露</td><td>次要</td><td>可选 sector cap</td></tr>
+<tr><td>q 集中</td><td>否</td><td>非主因</td></tr>
+<tr><td>κ_max 过大</td><td><b>是</b></td><td>κ_max→0.5 时 CVaR 2.68%，接近 B</td></tr>
+<tr><td>窗口 M</td><td>否</td><td>保持 M=252</td></tr>
+</table>
+</div>
+
+<h2>9. 诊断完成后的模型修改决策树</h2>
+
+<table>
+<tr>
+<th>诊断结果</th>
+<th>说明</th>
+<th>后续改法</th>
+</tr>
+<tr>
+<td>$\kappa$ 响应方向错误</td>
+<td>状态变量或 $\beta$ 符号不合理</td>
+<td>重新定义 $s_t$，用 validation 选择 $\beta$</td>
+</tr>
+<tr>
+<td>$\kappa$ 过度跳动</td>
+<td>风险度量不稳定</td>
+<td>加入 $\kappa_t=\rho\kappa_{t-1}+(1-\rho)\kappa(s_t)$ 平滑</td>
+</tr>
+<tr>
+<td>$\kappa_{\max}$ 小时明显改善</td>
+<td>原模型过度鲁棒</td>
+<td>降低 $\kappa_{\max}$，用 validation 固定</td>
+</tr>
+<tr>
+<td>C 权重更集中</td>
+<td>状态依赖导致组合集中</td>
+<td>加入 HHI penalty 或单资产上限</td>
+</tr>
+<tr>
+<td>C 行业暴露失衡</td>
+<td>高维股票池行业风险未控制</td>
+<td>加入 sector cap 或 sector-neutral 约束</td>
+</tr>
+<tr>
+<td>q 过度集中少数样本</td>
+<td>tail estimation noise 被放大</td>
+<td>增加窗口 M，降低 $\kappa_{\max}$，或使用 shrinkage</td>
+</tr>
+<tr>
+<td>所有诊断均不支持 C</td>
+<td>state-dependent $\kappa(s)$ 在 SP100 暂不适用</td>
+<td>论文中如实写 limitation，以 B_fixed / Historical CVaR 为强基线</td>
+</tr>
+</table>
+
+<h2>10. 建议执行顺序</h2>
+
+<table>
+<tr>
+<th>顺序</th>
+<th>实验</th>
+<th>预计耗时</th>
+<th>原因</th>
+</tr>
+<tr>
+<td>1</td>
+<td>$\kappa(s)$ 时间序列诊断</td>
+<td>很快</td>
+<td>不需要重跑，只读已有输出。</td>
+</tr>
+<tr>
+<td>2</td>
+<td>权重集中度 + 换手率诊断</td>
+<td>很快</td>
+<td>不需要重跑，只读 weights。</td>
+</tr>
+<tr>
+<td>3</td>
+<td>行业暴露诊断</td>
+<td>中等</td>
+<td>需要 sector 信息，但无需重跑优化。</td>
+</tr>
+<tr>
+<td>4</td>
+<td>q 权重诊断</td>
+<td>中等</td>
+<td>可能需要打开 debug 保存 q。</td>
+</tr>
+<tr>
+<td>5</td>
+<td>$\kappa_{\max}$ sensitivity</td>
+<td>较慢</td>
+<td>需要重跑多个 C_manual。</td>
+</tr>
+<tr>
+<td>6</td>
+<td>窗口长度 sensitivity</td>
+<td>较慢</td>
+<td>需要重跑多个窗口。</td>
+</tr>
+</table>
+
+<h2>11. 当前阶段的论文写法建议</h2>
+
+<div class="warn">
+在诊断完成前，不要写：
+<br>
+<b>“state-dependent $\kappa(s)$ 在所有市场上稳定优于 baseline。”</b>
+<br><br>
+应暂时写：
+<br>
+<b>“state-dependent $\kappa(s)$ 在 ETF10 和 SP30 中有效，但在 SP100 中未能稳定优于 fixed robust 或 historical CVaR baseline。本文进一步通过诊断实验分析其高维失效机制。”</b>
+</div>
+
+<h2>12. 诊断实验完成后应形成的结论模板</h2>
+
+<h3>12.1 如果发现 $\kappa$ 过度鲁棒</h3>
+
+<div class="box">
+在高维 SP100 股票池中，手工 $\kappa(s)$ 的动态范围过大，使 RCVaR 过度强调少数历史尾部样本，从而放大 tail estimation noise。降低 $\kappa_{\max}$ 或平滑 $\kappa_t$ 是下一步改进方向。
+</div>
+
+<h3>12.2 如果发现权重/行业集中</h3>
+
+<div class="box">
+状态依赖风险度量本身虽然增强了尾部保守性，但在高维个股池中可能诱导组合集中，尤其是行业集中。因此 future version 需要加入 sector-aware constraints 或 diversification regularization。
+</div>
+
+<h3>12.3 如果发现 Historical CVaR 稳定占优</h3>
+
+<div class="box">
+Historical CVaR 在高维股票池中仍是非常强的 baseline，说明简单、稳定的尾部风险最小化在有限样本中可能优于更复杂的状态依赖风险包络。
+</div>
+
+<h2>13. 最终总结</h2>
+
+<div class="good">
+<b>诊断结论（2026-07-01）</b>
+<p>$C_{\text{manual}}$ 在 SP100 失败的主因<b>不是</b> κ(s) 映射方向错误，而是：</p>
+<ol>
+<li><b>κ_max=1.0 过度鲁棒</b> — 降至 0.5 后 CVaR 从 2.92%→2.68%，接近 B_fixed；</li>
+<li><b>动态 κ 导致换手翻倍</b>（0.61 vs A 0.27）— 样本外稳定性受损；</li>
+<li><b>权重更集中</b>（N^eff 70 vs A 88）— 高维个股池 diversification 不足。</li>
+</ol>
+<p>Historical CVaR（2.46%）仍是最强 baseline；RCVaR 族内 B_fixed（2.66%）优于默认 C_manual。</p>
+<p><b>下一步改模型（V5 方向）：</b> κ_max 在 val 上选 0.25–0.75；κ 时间平滑；换手/HHI 正则；而非放弃 state-dependent κ。</p>
+</div>
+
+<div class="good">
+本诊断计划的目标不是马上让 C_manual 变好，而是先弄清楚：
+<br><br>
+$$
+\boxed{
+C_{\text{manual}}\text{ 在 SP100 上失败的机制是什么？}
+}
+$$
+<br>
+只有明确失败原因后，才能决定是否：
+<br>
+1. 降低 $\kappa_{\max}$；<br>
+2. 平滑 $\kappa_t$；<br>
+3. 增加窗口长度；<br>
+4. 加入 sector cap；<br>
+5. 改成 asset-aware / sector-aware $\kappa$；<br>
+6. 或者在论文中如实把 SP100 写成 high-dimensional limitation。
+</div>
+
+</body>
+</html>

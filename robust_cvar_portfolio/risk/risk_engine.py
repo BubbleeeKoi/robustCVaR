@@ -7,6 +7,7 @@ import pandas as pd
 
 from robust_cvar_portfolio.risk.kappa import KappaParams, kappa_vector_for_losses_v2
 from robust_cvar_portfolio.risk.rcvar import compute_rcvar
+from robust_cvar_portfolio.src.risk_metrics import cvar_alpha_ceil
 
 
 class RiskEngine:
@@ -41,5 +42,8 @@ class RiskEngine:
         features: pd.DataFrame,
         weights: np.ndarray,
     ) -> tuple[float, np.ndarray]:
+        if self.kappa_mode == "plain_ceil":
+            kappa = np.ones(len(losses), dtype=float)
+            return cvar_alpha_ceil(losses, self.alpha), kappa
         kappa = self.kappa_vector(features, weights)
         return compute_rcvar(losses, kappa, self.alpha), kappa

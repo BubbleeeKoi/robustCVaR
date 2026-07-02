@@ -60,13 +60,29 @@ def var_alpha(losses: np.ndarray | pd.Series, alpha: float = 0.05) -> float:
     return float(np.quantile(x, 1.0 - alpha))
 
 
-def cvar_alpha(losses: np.ndarray | pd.Series, alpha: float = 0.05) -> float:
+def cvar_alpha_ceil(losses: np.ndarray | pd.Series, alpha: float = 0.05) -> float:
+    """Ceil-tail simple-average CVaR: mean of worst ceil(alpha*n) losses."""
     x = np.sort(np.asarray(losses, dtype=float))[::-1]
     n = len(x)
     if n == 0:
         return 0.0
     upper = max(1, int(np.ceil(alpha * n)))
     return float(np.mean(x[:upper]))
+
+
+def cvar_alpha_fractional(losses: np.ndarray | pd.Series, alpha: float = 0.05) -> float:
+    """Fractional-tail empirical CVaR; equals RCVaR(kappa=1) when alpha*n may be non-integer."""
+    from robust_cvar_portfolio.src.robust_cvar_layer import robust_cvar
+
+    x = np.asarray(losses, dtype=float)
+    if len(x) == 0:
+        return 0.0
+    return float(robust_cvar(x, 1.0, alpha))
+
+
+def cvar_alpha(losses: np.ndarray | pd.Series, alpha: float = 0.05) -> float:
+    """Backward-compatible alias for ceil-tail CVaR (Historical baseline definition)."""
+    return cvar_alpha_ceil(losses, alpha)
 
 
 def turnover(weights: np.ndarray, w_prev: np.ndarray) -> float:

@@ -365,4 +365,190 @@ robust_cvar_portfolio/
 
 ---
 
-*V1 完成：2026-06-29；V2 完成：2026-07-01；环境：`conda activate portfolio`*
+## 10. V3：SP100 指数成分股主实验（2026-07-01 完成）
+
+### 10.1 目标与数据
+
+- **股票池**：S&P 500 大型股 **100 只**（Version A，当前成分回填，存在 survivorship bias，论文需注明）
+- **数据**：akshare `stock_us_daily`，`data/processed/sp100/`（100 资产 × 3475 日，**2011-01-27 ~ 2024-12-31**）
+- **划分**：Train 2010–2017 / Val 2018–2019 / Test **2020–2024**
+- **Benchmark**：SPY
+
+### 10.2 运行方式（无需 conda 交互，直接执行）
+
+```powershell
+# 推荐：直接调用 portfolio 环境 Python（避免 conda run 卡住）
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v3_experiment.py
+
+# 或批处理
+robust_cvar_portfolio\scripts\run_v3.bat
+```
+
+- 支持 **断点续跑**：每个模型完成后写入 `outputs/v3/sp100/rolling_{model}.csv`，中断后重跑自动跳过已完成模型。
+- 全流程耗时约 **2.7 小时**（100 资产，5 个消融模型 + 7 个 baseline）。
+
+### 10.3 V3 主消融结果（Test 2020–2024，CVaR₅% 越低越好）
+
+| 模型 | CVaR₅% | MDD | Sharpe | 2020危机 | 2022高波动 |
+|------|--------|-----|--------|---------|-----------|
+| **B_fixed_kappa** | **2.66%** | **25.6%** | 0.29 | **2.9%** | 11.1% |
+| A_no_kappa | 2.86% | 35.7% | **0.40** | 15.3% | **8.0%** |
+| D_state_action | 2.83% | 35.7% | 0.22 | 14.4% | 8.4% |
+| C_learned_kappa | 2.87% | 35.7% | 0.04 | 17.7% | 8.6% |
+| C_manual_kappa | 2.92% | 35.7% | 0.11 | 15.6% | 9.4% |
+
+**V3 成功标准检验**：`CVaR(C_manual) < CVaR(A)` → **未满足**（2.92% > 2.86%）；MDD 相同（35.7%）。Bootstrap `P(CVaR_C < CVaR_A) = 26.4%`，改善**不显著**。
+
+### 10.4 传统 Baseline 对比（Test）
+
+| 方法 | CVaR₅% | MDD | Sharpe |
+|------|--------|-----|--------|
+| **Historical_CVaR** | **2.46%** | **24.9%** | **0.50** |
+| B_fixed_kappa | 2.66% | 25.6% | 0.29 |
+| Risk_Parity | 2.96% | 35.1% | 0.47 |
+| A_no_kappa | 2.86% | 35.7% | 0.40 |
+| C_manual_kappa | 2.92% | 35.7% | 0.11 |
+| Equal_Weight | 3.11% | 35.7% | 0.52 |
+| SPY | 3.20% | 34.1% | 0.60 |
+
+### 10.5 V3 结论（相对 V2）
+
+1. **SP100 上 C_manual 未复现 V2 优势**：ETF10/SP30 有效，但 100 只股票高维组合下状态依赖 κ(s) 反而略差于 plain CVaR。
+2. **B_fixed（κ=2）在 SP100 上表现最好**：CVaR 2.66%、MDD 25.6%，优于 C_manual 与 A。
+3. **Historical CVaR baseline 最强**：滚动历史 CVaR 优化得 CVaR 2.46%，说明高维下优化器/κ 设计需进一步调参。
+4. **相对 SPY**：C_manual CVaR 2.92% < SPY 3.20%，尾部风险仍优于指数，但 Sharpe 远低于 SPY。
+5. **论文建议**：SP100 结果如实报告；主贡献仍可依托 ETF10 + SP30；SP100 作为 scale-up 边界案例讨论（κ(s) 在高维股票池的边际收益与计算成本）。
+
+### 10.6 V3 输出目录
+
+| 路径 | 用途 |
+|------|------|
+| `outputs/v3/sp100/` | 完整中间结果、图表、checkpoint |
+| `outputs/v3/sp100_final/` | 论文级 table1–5、fig1–5、summary |
+| `outputs/v3/sp100/rolling_{model}.csv` | 模型断点，支持续跑 |
+| `data/processed/sp100/universe.csv` | 100 只股票列表与 sector |
+
+---
+
+## 11. V4：SP100 诊断实验（2026-07-01）
+
+> 计划文件：`sp100_diagnostic_experiment_v4plan.html`（每步诊断结果已写回该 HTML）
+
+### 11.1 运行方式
+
+```powershell
+# 全流程（含权重导出 + 敏感性，耗时长）
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v4_diagnostics.py
+
+# 仅补跑敏感性 + 汇总（diag 1–6 已完成时）
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v4_diagnostics.py --sensitivity-only
+```
+
+输出目录：`robust_cvar_portfolio/outputs/v3/sp100_diagnostics/`
+
+### 11.2 诊断结论摘要（C_manual 为何在 SP100 失败）
+
+| 诊断项 | 是否支持失败解释 | 主要证据 |
+|--------|------------------|----------|
+| κ(s) 响应方向 | **否** | corr(κ,Vol)=+0.82，corr(κ,DD)=+0.78；危机期 κ 均值 1.84 vs 正常 1.26 |
+| 权重更集中 | **是** | C 有效持仓 N^eff=70.3 vs B 79.4 vs A 87.7；最大单权重 10.6% |
+| 换手更高 | **是** | C 平均换手 0.607 vs A 0.272（约 2.2×） |
+| 行业暴露失衡 | 次要 | C 行业 HHI 略高于 B，但 HistCVaR 更极端仍更优 |
+| q 过度集中 | **否** | B 的 q HHI 最高但 CVaR 最优 |
+| κ_max 敏感性 | **是** | κ_max=0.5 → CVaR **2.68%**（优于 A，接近 B 2.66%）；当前 1.0 → 3.00% |
+| 窗口 M 敏感性 | **否** | M=504 CVaR 3.08% ≥ M=252 3.00% |
+
+### 11.3 机制归纳（论文可写）
+
+1. **κ(s) 映射本身有效**，危机期上升、与 Vol/DD 正相关。
+2. **动态 κ 导致优化目标月际变化大** → 换手显著上升（0.61 vs A 0.27）→ 样本外 CVaR 恶化。
+3. **C 权重更集中**（N^eff=70 vs A 88），高维个股池中 diversification 不足。
+4. **κ_max=1.0 在 SP100 上过大**；降至 0.5 后 CVaR 2.68%，说明是参数/幅度问题而非机制失效。
+5. **固定 κ=2（B）** 与 **Historical CVaR（2.46%）** 仍是 SP100 强基线。
+6. **下一步改模型（V5）**：val 上选 κ_max∈[0.25,0.75]；κ 平滑；换手/HHI 惩罚。
+
+### 11.4 关键输出文件
+
+| 路径 | 内容 |
+|------|------|
+| `diagnostic_summary.csv` | 七项诊断汇总 + next_action |
+| `kappa_diagnostics/kappa_summary.csv` | κ 统计与相关性 |
+| `weights_diagnostics/weight_concentration.csv` | HHI / N_eff |
+| `turnover_diagnostics/turnover_summary.csv` | 换手对比 |
+| `q_weight_diagnostics/q_weight_summary.csv` | worst-case q 集中度 |
+| `figures/fig_*.png` | 诊断图 |
+
+---
+
+## 12. Baseline Audit：CVaR 定义统一与公平对照（2026-07-02）
+
+> 背景：V3 中 `Historical_CVaR` 优于 `A_no_kappa` 经调查有三层原因——(1) 优化器内 CVaR 定义不同（fractional vs ceil）；(2) Historical 调仓日成本 bug（已修）；(3) 非凸路径差异。本节在修复成本、显式拆分 CVaR 定义后重跑 SP100 Test（2020–2024）。
+
+### 12.1 代码改动
+
+| 模块 | 改动 |
+|------|------|
+| `src/risk_metrics.py` | `cvar_alpha_fractional` / `cvar_alpha_ceil`；`cvar_alpha` 别名 ceil（与 Historical 一致） |
+| `risk/risk_engine.py` | `plain_ceil` 模式（κ=1 时用 ceil-tail 目标） |
+| `src/baselines.py` | 修复 Historical 调仓日 `w_prev=w` 导致换手=0 的成本 bug |
+| `tests/test_cvar_definitions.py` | 两种定义在 αM 非整数时不相等 |
+| `experiments/run_baseline_audit.py` | 公平对照实验脚本 |
+
+### 12.2 运行方式
+
+```powershell
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_baseline_audit.py
+```
+
+输出目录：`robust_cvar_portfolio/outputs/v3/sp100_baseline_audit/`（含 rolling checkpoint，可续跑）
+
+耗时：约 **178 分钟**（含 val 上 κ_max 网格 + 6 个 Test 模型 + Historical 权重导出）
+
+### 12.3 Val 选 κ_max（C_calibrated）
+
+| κ_max | Val CVaR 5% |
+|-------|-------------|
+| 0.5 | 2.26% |
+| 0.75 | 2.19% |
+| **1.0** | **2.09%** ← 选中 |
+| 1.25 | 2.09% |
+| 1.5 | 2.12% |
+
+Val 最优为 **κ_max=1.0**，与默认相同，故 `C_calibrated` 与 `C_default` Test 轨迹完全一致。
+
+### 12.4 Test 公平对照（评估指标统一用 ceil-tail `cvar_alpha`）
+
+| 方法 | 分组 | CVaR 5% | MaxDD | 平均换手 | Sharpe |
+|------|------|---------|-------|----------|--------|
+| **Historical_CVaR_fixed** | external_baseline | **2.47%** | 25.1% | 0.038 | 0.44 |
+| **A_ceil_CVaR** | internal_ablation | **2.47%** | 25.1% | 0.038 | 0.44 |
+| B_fixed_kappa | internal_ablation | 2.66% | 25.6% | 0.020 | 0.29 |
+| A_frac_CVaR | internal_ablation | 2.86% | 35.7% | 0.015 | 0.40 |
+| C_default / C_calibrated | internal_ablation | 2.92% | 35.7% | 0.023 | 0.11 |
+
+**关键结论：**
+
+1. **`A_ceil_CVaR` 与 `Historical_CVaR_fixed` 数值完全一致**（权重、CVaR、Sharpe 相同）→ CVaR 定义统一后，Historical 等价于「鲁棒框架 κ=1 + ceil-tail 目标」。
+2. **`A_frac_CVaR`（κ=1 fractional-tail）Test CVaR 2.86%**，仍劣于 ceil-tail 路线 2.47%；差距主要来自**优化目标定义**，而非 baseline 成本 bug（bug 已修）。
+3. **内部消融**：`C_default` **未**优于 `A_frac`（2.92% vs 2.86%）；动态 κ 在 SP100 上仍失败。
+4. **外部 baseline**：修复后 Historical 仍是最强之一；与 V4 诊断一致，B（2.66%）次之。
+
+### 12.5 论文表述建议
+
+- κ=1 的 RCVaR 目标 = **fractional-tail empirical CVaR**；Historical / `A_ceil` = **ceil-tail approximation**；αM 非整数时两者优化路径不同，Test 上 ceil 更优（本数据集）。
+- **不要**写「RCVaR(κ=1) 不是 CVaR」；应写两种 **empirical tail 聚合方式** 在有限样本下不等价。
+- 内部对比：`C_*` vs `A_frac_CVaR`；外部对比：`Historical_CVaR_fixed`（或等价 `A_ceil_CVaR`）。
+
+### 12.6 关键输出文件
+
+| 路径 | 内容 |
+|------|------|
+| `fair_comparison_table.csv` | Test 全指标对照 |
+| `audit_summary.json` | 摘要 JSON |
+| `validation_kappa_max_sweep.csv` | Val κ_max 网格 |
+| `rolling_{method}.csv` | 各模型 Test 轨迹 checkpoint |
+| `weights_Historical_CVaR_fixed.csv` | Historical 调仓权重 |
+
+---
+
+*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*

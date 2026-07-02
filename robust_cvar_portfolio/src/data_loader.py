@@ -48,6 +48,7 @@ def download_prices(
     end_date: str,
     sleep_sec: float = 0.2,
     min_days: int = 1500,
+    require_full_overlap: bool = True,
 ) -> pd.DataFrame:
     collected: dict[str, pd.Series] = {}
     failed: list[str] = []
@@ -69,8 +70,10 @@ def download_prices(
     if len(collected) < 5:
         raise RuntimeError(f"too few valid tickers ({len(collected)}); failed={failed}")
 
-    prices = pd.DataFrame(collected).sort_index().dropna(how="any")
-    if prices.empty or len(prices) < min_days:
+    prices = pd.DataFrame(collected).sort_index()
+    if require_full_overlap:
+        prices = prices.dropna(how="any")
+    if prices.empty or (require_full_overlap and len(prices) < min_days):
         raise RuntimeError(
             f"overlap too short: {len(prices)} days; failed={failed}; assets={list(collected)}"
         )

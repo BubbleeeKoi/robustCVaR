@@ -1,0 +1,16 @@
+{
+  "n_assets": 100,
+  "test_period": [
+    "2020-01-01",
+    "2024-12-31"
+  ],
+  "C_manual_cvar": 0.029171287822253294,
+  "A_cvar": 0.02860140868937774,
+  "cvar_improvement_pct": -1.9924862410263038,
+  "C_mdd": 0.3574582520400241,
+  "A_mdd": 0.3574582520400241,
+  "success_cvar": false,
+  "success_mdd": false,
+  "elapsed_sec": 9752.451166152954,
+  "note": "Version A universe; survivorship bias possible"
+}

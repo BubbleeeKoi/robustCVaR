@@ -1,0 +1,10 @@
+{
+  "selected_kappa_max_val": 1.0,
+  "A_frac_cvar": 0.02860140868937774,
+  "A_ceil_cvar": 0.02469833995909896,
+  "Historical_fixed_cvar": 0.02469833995909896,
+  "C_default_cvar": 0.029171287822253294,
+  "C_calibrated_cvar": 0.029171287822253294,
+  "C_calibrated_beats_A_frac": false,
+  "elapsed_sec": 10686.637087583542
+}

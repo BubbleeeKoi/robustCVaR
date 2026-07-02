@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>V5 下一步实施计划：Validation-Calibrated State-Dependent RCVaR</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+body{
+    font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;
+    max-width:1160px;
+    margin:40px auto;
+    padding:0 24px;
+    line-height:1.75;
+    color:#222;
+}
+h1{border-bottom:3px solid #7f1d1d;padding-bottom:12px;}
+h2{margin-top:38px;border-left:6px solid #7f1d1d;padding-left:12px;}
+h3{color:#7f1d1d;margin-top:26px;}
+table{border-collapse:collapse;width:100%;margin:16px 0;}
+th,td{border:1px solid #ccc;padding:8px 10px;vertical-align:top;}
+th{background:#f8eeee;}
+pre,code{background:#f5f5f5;border-radius:4px;}
+code{padding:2px 4px;}
+pre{padding:14px;overflow-x:auto;}
+.box{background:#f7f7f7;border-left:5px solid #555;padding:14px 18px;margin:18px 0;}
+.warn{background:#fff7e6;border-left:5px solid #f59e0b;padding:14px 18px;margin:18px 0;}
+.good{background:#ecfdf5;border-left:5px solid #10b981;padding:14px 18px;margin:18px 0;}
+.bad{background:#fef2f2;border-left:5px solid #dc2626;padding:14px 18px;margin:18px 0;}
+.small{color:#666;font-size:0.94em;}
+</style>
+</head>
+
+<body>
+
+<h1>V5 下一步实施计划：Validation-Calibrated State-Dependent RCVaR</h1>
+
+<div class="box">
+<b>目标：</b> 把当前 V3/V4 中“默认 $C_{\text{manual}}$ 在 SP100 上不稳定”的问题，转化为一个规范的、可写论文的 V5 协议：
+<br><br>
+$$
+\boxed{
+\text{用 validation 选择 } \kappa_{\max}
++
+\text{控制权重集中与换手}
++
+\text{在 test 上只评价一次}
+}
+$$
+</div>
+
+<div class="warn">
+<b>核心原则：</b> 以后不是“每个市场看 test 结果后手工调 $\kappa_{\max}$”，而是每个市场都执行同一套 validation calibration 规则。
+<br><br>
+不能做：
+$$
+\text{看 2020--2024 test，哪个 }\kappa_{\max}\text{ 好就选哪个。}
+$$
+应该做：
+$$
+\kappa_{\max}^*
+=
+\arg\min_{\kappa_{\max}\in\mathcal K}
+J_{\text{val}}(\kappa_{\max}),
+\quad
+\text{然后在 test 固定 }\kappa_{\max}^*.
+$$
+</div>
+
+<h2>1. 先解决 A_no_kappa 与 Historical_CVaR 的关系</h2>
+
+<h3>1.1 理论上它们是不是一样？</h3>
+
+<p>如果二者都使用同一个历史窗口、同一个损失定义、同一个交易成本口径、同一个优化器和同一组约束，那么：</p>
+
+$$
+A_{\text{no kappa}}:
+\kappa=1
+$$
+
+<p>对应的 RCVaR 风险包络为：</p>
+
+$$
+q_i\le \frac{1}{\alpha B}.
+$$
+
+<p>这正好退化为普通经验 CVaR。因此：</p>
+
+$$
+\boxed{
+A_{\text{no kappa}}
+\equiv
+\text{Historical CVaR}
+}
+$$
+
+<p>也就是说，理论上 A_no_kappa 本质上就是历史经验 CVaR 优化。</p>
+
+<h3>1.2 你当前文件显示了什么？</h3>
+
+<p>根据当前上传的权重文件：</p>
+
+<pre><code>weights_A.csv
+weights_HistoricalCVaR.csv
+</code></pre>
+
+<p>两者形状相同，且所有权重完全一致：</p>
+
+$$
+\max_{t,i}|w^{A}_{i,t}-w^{Hist}_{i,t}|=0.
+$$
+
+<div class="bad">
+<b>这意味着：</b> 至少从权重文件看，A_no_kappa 和 Historical_CVaR 是同一个组合权重序列。
+</div>
+
+<h3>1.3 为什么之前结果会不一样？</h3>
+
+<p>如果权重完全一样，但 summary table 中 A_no_kappa 和 Historical_CVaR 的 CVaR、MDD、Sharpe 不一样，那么只能说明评价口径或文件读取出了问题。常见原因包括：</p>
+
+<table>
+<tr><th>可能原因</th><th>说明</th><th>处理</th></tr>
+<tr>
+<td>评价收益序列不同</td>
+<td>A 用一个 test returns，Historical 用另一个 returns 或 benchmark-aligned returns。</td>
+<td>统一读取同一个 <code>returns_test.csv</code>。</td>
+</tr>
+<tr>
+<td>交易成本口径不同</td>
+<td>A 可能使用了调仓成本，Historical 可能没有，或反过来。</td>
+<td>统一 <code>net_return = gross_return - cost</code>。</td>
+</tr>
+<tr>
+<td>rolling 文件缺失</td>
+<td>当前没有 <code>rolling_HistoricalCVaR.csv</code>，所以无法验证 Historical 的日度收益路径。</td>
+<td>必须重新生成 Historical 的 rolling 文件。</td>
+</tr>
+<tr>
+<td>baseline 权重误读</td>
+<td>诊断代码可能把 Historical 的权重读成了 A 的权重。</td>
+<td>在代码里打印文件路径、hash 和前几行权重。</td>
+</tr>
+<tr>
+<td>summary table 混入旧结果</td>
+<td>Historical_CVaR 可能来自旧版本 V3 table，不是当前权重重新计算出的结果。</td>
+<td>清空输出目录后重新汇总。</td>
+</tr>
+</table>
+
+<h3>1.4 必须做的数据审计</h3>
+
+<p>在进入 V5 之前，先做一个 <b>Baseline Audit</b>：</p>
+
+<pre><code>robust_cvar_portfolio/outputs/v5/audit/
+    compare_A_vs_Historical_weights.csv
+    rolling_A_no_kappa_recomputed.csv
+    rolling_Historical_CVaR_recomputed.csv
+    baseline_audit_summary.csv
+</code></pre>
+
+<p>检查项目：</p>
+
+<table>
+<tr><th>检查项</th><th>合格标准</th></tr>
+<tr><td>权重是否相同</td><td>若都是普通历史 CVaR，权重应完全相同或数值近似相同。</td></tr>
+<tr><td>日度净收益是否相同</td><td>权重相同且成本口径相同，则日度 net_return 必须相同。</td></tr>
+<tr><td>CVaR 是否相同</td><td>日度 net_return 相同，则 CVaR/MDD/Sharpe 必须相同。</td></tr>
+<tr><td>是否重复报告</td><td>如果 A 与 Historical 一样，论文中只保留一个名字。</td></tr>
+</table>
+
+<h3>1.5 论文命名建议</h3>
+
+<p>如果审计确认 A_no_kappa = Historical_CVaR，则论文中不要同时作为两个不同策略报告。建议统一改名：</p>
+
+$$
+\boxed{
+A:\ \text{Historical CVaR }(\kappa=1)
+}
+$$
+
+<p>然后 B、C、D 分别作为 fixed robust、state-dependent robust、state-action-dependent robust。</p>
+
+<h2>2. V5 总体目标</h2>
+
+<p>V5 不要马上做复杂 RL，也不要立刻做 asset-aware $\kappa_i(s)$。先做一个最小但规范的版本：</p>
+
+$$
+\boxed{
+C_{\text{calibrated}}
+=
+\text{validation-calibrated state-dependent RCVaR}
+}
+$$
+
+<p>核心公式：</p>
+
+$$
+\kappa_t^{raw}
+=
+1+
+\kappa_{\max}
+\sigma(\beta^\top s_t).
+$$
+
+<p>可选平滑：</p>
+
+$$
+\bar{\kappa}_t
+=
+\rho\bar{\kappa}_{t-1}
++
+(1-\rho)\kappa_t^{raw}.
+$$
+
+<p>最终优化：</p>
+
+$$
+w_t^*
+=
+\arg\min_{w\in\Delta^N}
+RCVaR_{\alpha,\bar{\kappa}_t}
+\left(
+\{-w^\top r_\tau\}_{\tau=t-M}^{t-1}
+\right)
++
+c\|w-w_{t-1}\|_1
++
+\lambda_h\sum_i w_i^2.
+$$
+
+<p>可选权重上限：</p>
+
+$$
+0\le w_i\le u,\qquad \sum_iw_i=1.
+$$
+
+<h2>3. 数据集与时间划分协议</h2>
+
+<p>后面不只是 SP100，所以要统一协议。每个市场都按同一套流程跑。</p>
+
+<table>
+<tr><th>阶段</th><th>时间</th><th>用途</th></tr>
+<tr><td>Train</td><td>2010--2017</td><td>下载、清洗、状态标准化参数、初始验证。</td></tr>
+<tr><td>Validation</td><td>2018--2019</td><td>选择 $\kappa_{\max}$、可选 $u$、可选 $\rho$。</td></tr>
+<tr><td>Test</td><td>2020--2024</td><td>最终样本外评价，只能跑一次汇总，不用于调参。</td></tr>
+</table>
+
+<div class="warn">
+如果某个市场数据起点不同，可以保持 test 期不变；train/validation 尽量保持一致。所有市场必须在报告里写清楚有效样本期。
+</div>
+
+<h2>4. 每个市场是否都要不同 $\kappa_{\max}$？</h2>
+
+<h3>4.1 正确答案</h3>
+
+<p>可以不同，但必须由同一套 validation 规则自动选择。</p>
+
+$$
+\boxed{
+\kappa_{\max}\text{ 是模型超参数，可以按资产池校准。}
+}
+$$
+
+<p>原因是不同资产池的尾部结构不同：</p>
+
+<table>
+<tr><th>市场/资产池</th><th>特征</th><th>$\kappa_{\max}$ 可能表现</th></tr>
+<tr><td>ETF10</td><td>低维、多资产分散</td><td>$\kappa_{\max}=1$ 可能稳定。</td></tr>
+<tr><td>ETF20</td><td>更分散，尾部被平滑</td><td>$\kappa$ 边际作用可能弱。</td></tr>
+<tr><td>SP30</td><td>中等股票池</td><td>状态依赖 $\kappa(s)$ 可能有效。</td></tr>
+<tr><td>SP100</td><td>高维股票池，个股噪声大</td><td>需要校准 $\kappa_{\max}$ 并控制权重集中。</td></tr>
+</table>
+
+<h3>4.2 不正确做法</h3>
+
+<pre><code>for each dataset:
+    在 test 上跑很多 kappa_max
+    选择 test CVaR 最低的值
+    当作主结果
+</code></pre>
+
+<p>这是 test-set tuning，会导致 data snooping。</p>
+
+<h3>4.3 正确做法</h3>
+
+<pre><code>for each dataset:
+    在 validation 上搜索 kappa_max
+    固定选出的 kappa_max
+    在 test 上评价一次
+</code></pre>
+
+<p>论文可写：</p>
+
+<div class="box">
+For each universe, $\kappa_{\max}$ is selected on the validation period and fixed before out-of-sample testing. No test-period information is used for parameter selection.
+</div>
+
+<h2>5. Validation 目标函数设计</h2>
+
+<h3>5.1 不建议只用 validation CVaR</h3>
+
+<p>如果只选：</p>
+
+$$
+\arg\min CVaR^{val}_{5\%},
+$$
+
+<p>可能选出换手很高、权重很集中的参数。V4 诊断已经显示 SP100 的问题正是高换手与集中。</p>
+
+<h3>5.2 推荐目标函数</h3>
+
+$$
+J_{\text{val}}
+=
+CVaR^{val}_{5\%}
++
+\lambda_{turn}\overline{Turn}^{val}
++
+\lambda_{hhi}\overline{HHI}^{val}.
+$$
+
+<table>
+<tr><th>项</th><th>含义</th></tr>
+<tr><td>$CVaR^{val}_{5\%}$</td><td>验证期尾部风险。</td></tr>
+<tr><td>$\overline{Turn}^{val}$</td><td>验证期平均换手率。</td></tr>
+<tr><td>$\overline{HHI}^{val}$</td><td>验证期平均权重集中度。</td></tr>
+</table>
+
+<h3>5.3 简化版目标</h3>
+
+<p>如果你想先简单执行：</p>
+
+$$
+J_{\text{val}}
+=
+CVaR^{val}_{5\%}
++
+0.001\overline{Turn}^{val}.
+$$
+
+<p>更稳健版本：</p>
+
+$$
+J_{\text{val}}
+=
+CVaR^{val}_{5\%}
++
+0.001\overline{Turn}^{val}
++
+0.01\overline{HHI}^{val}.
+$$
+
+<div class="warn">
+这些系数可以先作为工程默认值，但必须在所有市场统一使用。不要每个市场单独调 $\lambda$。
+</div>
+
+<h2>6. V5 模型集合</h2>
+
+<p>每个市场至少跑以下模型：</p>
+
+<table>
+<tr><th>模型名</th><th>定义</th><th>论文角色</th></tr>
+<tr>
+<td>A_Historical_CVaR</td>
+<td>$\kappa=1$</td>
+<td>普通历史 CVaR baseline。</td>
+</tr>
+<tr>
+<td>B_fixed_kappa</td>
+<td>$\kappa=2$</td>
+<td>固定鲁棒 baseline。</td>
+</tr>
+<tr>
+<td>C_default</td>
+<td>$\kappa_{\max}=1.0$</td>
+<td>未校准状态依赖模型。</td>
+</tr>
+<tr>
+<td>C_calibrated</td>
+<td>$\kappa_{\max}$ 由 validation 选择</td>
+<td>V5 主模型。</td>
+</tr>
+<tr>
+<td>C_cap</td>
+<td>C_calibrated + $w_i\le u$</td>
+<td>控制集中度的增强模型。</td>
+</tr>
+<tr>
+<td>C_smooth</td>
+<td>C_calibrated + $\kappa$ 平滑</td>
+<td>控制换手的增强模型。</td>
+</tr>
+<tr>
+<td>C_stable</td>
+<td>C_calibrated + cap + smoothing</td>
+<td>最终稳定版本候选。</td>
+</tr>
+</table>
+
+<h2>7. 超参数搜索网格</h2>
+
+<h3>7.1 第一阶段：只校准 $\kappa_{\max}$</h3>
+
+$$
+\mathcal K=
+\{0.25,0.50,0.75,1.00,1.25,1.50\}.
+$$
+
+<p>输出：</p>
+
+<pre><code>outputs/v5/{dataset}/validation/kappa_max_grid.csv
+outputs/v5/{dataset}/test/C_calibrated_results.csv
+</code></pre>
+
+<h3>7.2 第二阶段：加入权重上限</h3>
+
+<p>只在第一阶段选出的 $\kappa_{\max}^*$ 基础上测试：</p>
+
+$$
+u\in\{0.05,0.08,0.10,\text{None}\}.
+$$
+
+<p>对于 SP100，优先测试：</p>
+
+$$
+u=0.08,\quad u=0.10.
+$$
+
+<h3>7.3 第三阶段：加入 $\kappa$ 平滑</h3>
+
+$$
+\rho\in\{0.5,0.7,0.9,\text{None}\}.
+$$
+
+<p>优先测试：</p>
+
+$$
+\rho=0.7.
+$$
+
+<h3>7.4 不要一次全网格爆炸</h3>
+
+<p>不要直接跑：</p>
+
+$$
+6\times4\times4=96
+$$
+
+<p>个组合。建议分阶段：</p>
+
+<ol>
+<li>先选 $\kappa_{\max}$；</li>
+<li>再测试 cap；</li>
+<li>最后测试 smooth；</li>
+<li>最终只保留 1--2 个 stable model。</li>
+</ol>
+
+<h2>8. 推荐执行顺序</h2>
+
+<table>
+<tr><th>步骤</th><th>任务</th><th>说明</th><th>是否重跑优化</th></tr>
+<tr>
+<td>Step 0</td>
+<td>Baseline audit</td>
+<td>确认 A 与 Historical 是否完全相同。</td>
+<td>部分需要</td>
+</tr>
+<tr>
+<td>Step 1</td>
+<td>统一 A 命名</td>
+<td>若 A=Historical，则合并为 A_Historical_CVaR。</td>
+<td>否</td>
+</tr>
+<tr>
+<td>Step 2</td>
+<td>Validation kappa search</td>
+<td>在 2018--2019 上选 $\kappa_{\max}$。</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Step 3</td>
+<td>Test C_calibrated</td>
+<td>固定 $\kappa_{\max}^*$ 后跑 2020--2024。</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Step 4</td>
+<td>Weight cap test</td>
+<td>测试 $u=5\%,8\%,10\%$。</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Step 5</td>
+<td>Kappa smoothing test</td>
+<td>测试 $\rho=0.5,0.7,0.9$。</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Step 6</td>
+<td>Cross-market repeat</td>
+<td>对 ETF10/ETF20/SP30/SP100/其他市场统一执行。</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Step 7</td>
+<td>Final tables</td>
+<td>输出论文主表、跨市场表、诊断表。</td>
+<td>否</td>
+</tr>
+</table>
+
+<h2>9. 输出目录设计</h2>
+
+<pre><code>robust_cvar_portfolio/outputs/v5/
+    audit/
+        baseline_audit_summary.csv
+        compare_A_vs_Historical_weights.csv
+
+    {dataset}/
+        validation/
+            kappa_max_grid.csv
+            cap_grid.csv
+            smoothing_grid.csv
+            selected_params.json
+
+        test/
+            table_main.csv
+            table_ablation.csv
+            rolling_A_Historical_CVaR.csv
+            rolling_B_fixed_kappa.csv
+            rolling_C_default.csv
+            rolling_C_calibrated.csv
+            rolling_C_cap.csv
+            rolling_C_smooth.csv
+            rolling_C_stable.csv
+            weights_A_Historical_CVaR.csv
+            weights_B_fixed_kappa.csv
+            weights_C_calibrated.csv
+            weights_C_stable.csv
+
+        figures/
+            nav_comparison.png
+            drawdown_comparison.png
+            kappa_series.png
+            turnover_comparison.png
+            weight_concentration.png
+            validation_kappa_grid.png
+
+    cross_market/
+        selected_params_by_dataset.csv
+        test_cvar_by_dataset.csv
+        test_turnover_by_dataset.csv
+        final_paper_table.csv
+</code></pre>
+
+<h2>10. 成功标准</h2>
+
+<h3>10.1 最低成功标准</h3>
+
+<p>每个市场中，C_calibrated 至少应满足：</p>
+
+$$
+CVaR(C_{\text{calibrated}})
+<
+CVaR(A_{\text{Historical}})
+$$
+
+<p>或者如果不能满足，至少要说明原因。</p>
+
+<h3>10.2 强成功标准</h3>
+
+$$
+CVaR(C_{\text{stable}})
+<
+\min\{
+CVaR(A_{\text{Historical}}),
+CVaR(B_{\text{fixed}})
+\}.
+$$
+
+<h3>10.3 稳定性标准</h3>
+
+<p>不能只看 CVaR，还要看：</p>
+
+<table>
+<tr><th>指标</th><th>目标</th></tr>
+<tr><td>平均换手</td><td>不应明显高于 A/B，例如不超过 B 的 1.5 倍。</td></tr>
+<tr><td>有效持仓数</td><td>SP100 不应长期低于 50。</td></tr>
+<tr><td>最大单权重</td><td>建议不超过 8% 或 10%。</td></tr>
+<tr><td>MDD</td><td>不应显著高于 A/B。</td></tr>
+<tr><td>Bootstrap</td><td>$P(CVaR_C < CVaR_A)$ 越高越好，最好超过 70%。</td></tr>
+</table>
+
+<h2>11. 代码实现建议</h2>
+
+<h3>11.1 新增配置文件</h3>
+
+<pre><code>robust_cvar_portfolio/configs/v5_common.yaml
+</code></pre>
+
+<p>内容示例：</p>
+
+<pre><code>validation:
+  start: "2018-01-01"
+  end: "2019-12-31"
+
+test:
+  start: "2020-01-01"
+  end: "2024-12-31"
+
+kappa_max_grid: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+weight_cap_grid: [0.05, 0.08, 0.10, null]
+rho_grid: [0.5, 0.7, 0.9, null]
+
+selection_objective:
+  lambda_turnover: 0.001
+  lambda_hhi: 0.01
+
+constraints:
+  long_only: true
+  fully_invested: true
+</code></pre>
+
+<h3>11.2 新增脚本</h3>
+
+<pre><code>robust_cvar_portfolio/experiments/run_v5_calibration.py
+robust_cvar_portfolio/experiments/run_v5_test.py
+robust_cvar_portfolio/experiments/run_v5_cross_market.py
+robust_cvar_portfolio/experiments/audit_baselines.py
+</code></pre>
+
+<h3>11.3 推荐命令</h3>
+
+<pre><code># 0. 审计 A 与 Historical
+python robust_cvar_portfolio/experiments/audit_baselines.py --dataset sp100
+
+# 1. validation 选择 kappa_max
+python robust_cvar_portfolio/experiments/run_v5_calibration.py --dataset sp100
+
+# 2. 固定 validation 参数跑 test
+python robust_cvar_portfolio/experiments/run_v5_test.py --dataset sp100
+
+# 3. 跑所有市场
+python robust_cvar_portfolio/experiments/run_v5_cross_market.py
+</code></pre>
+
+<h2>12. 跨市场结果表设计</h2>
+
+<table>
+<tr>
+<th>Dataset</th>
+<th>N</th>
+<th>Selected $\kappa_{\max}$</th>
+<th>Selected cap</th>
+<th>Selected $\rho$</th>
+<th>A CVaR</th>
+<th>B CVaR</th>
+<th>C_default CVaR</th>
+<th>C_calibrated CVaR</th>
+<th>C_stable CVaR</th>
+<th>Best?</th>
+</tr>
+<tr>
+<td>ETF10</td><td>10</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+</tr>
+<tr>
+<td>ETF20</td><td>20</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+</tr>
+<tr>
+<td>SP30</td><td>29/30</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+</tr>
+<tr>
+<td>SP100</td><td>100</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+</tr>
+</table>
+
+<h2>13. 论文写法建议</h2>
+
+<h3>13.1 方法部分</h3>
+
+<p>不要说“我们手动选择每个市场最好的 $\kappa_{\max}$”。应该写：</p>
+
+<div class="box">
+The amplitude parameter $\kappa_{\max}$ is treated as a hyperparameter and selected on the validation period for each asset universe using the same pre-specified selection rule. The selected value is then fixed throughout the test period.
+</div>
+
+<h3>13.2 实证部分</h3>
+
+<p>可以分成三张主表：</p>
+
+<table>
+<tr><th>表</th><th>内容</th></tr>
+<tr><td>Table 1</td><td>单市场主结果，例如 ETF10 或 SP100。</td></tr>
+<tr><td>Table 2</td><td>跨市场 CVaR 对比。</td></tr>
+<tr><td>Table 3</td><td>Validation-selected 参数表。</td></tr>
+<tr><td>Table 4</td><td>权重集中度与换手诊断。</td></tr>
+<tr><td>Table 5</td><td>Bootstrap 显著性。</td></tr>
+</table>
+
+<h3>13.3 Discussion</h3>
+
+<p>SP100 的 V4 诊断可以写成方法边界：</p>
+
+<div class="box">
+In high-dimensional stock universes, a default state-dependent ambiguity budget may induce excessive turnover and concentrated portfolios. This motivates the validation-calibrated and stability-regularized version of the proposed model.
+</div>
+
+<h2>14. 最终结论</h2>
+
+<div class="good">
+下一步不是“每个市场随便调 $\kappa_{\max}$”，而是建立一个固定、可复现、没有 test leakage 的校准协议：
+<br><br>
+$$
+\boxed{
+\text{validation 选择参数}
+\rightarrow
+\text{test 固定评价}
+\rightarrow
+\text{跨市场统一汇总}
+}
+$$
+<br>
+如果 V5 跑通，你的论文主线会从“默认 $\kappa(s)$ 是否总是有效”升级为：
+<br><br>
+$$
+\boxed{
+\text{状态依赖鲁棒 CVaR 是有效的，但高维市场需要 validation calibration 和稳定性控制。}
+}
+$$
+</div>
+
+</body>
+</html>

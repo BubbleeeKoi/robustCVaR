@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Robust CVaR Portfolio 下一步实验计划 Plan</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+body{
+    font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 0 24px;
+    line-height: 1.75;
+    color: #222;
+}
+h1{border-bottom: 3px solid #1f77b4; padding-bottom: 12px;}
+h2{margin-top: 36px; border-left: 6px solid #1f77b4; padding-left: 12px;}
+h3{margin-top: 26px; color: #1f4e79;}
+.box{background: #f4f8fb; border-left: 5px solid #1f77b4; padding: 14px 18px; margin: 18px 0;}
+.warn{background: #fff7e6; border-left: 5px solid #f0ad4e; padding: 14px 18px; margin: 18px 0;}
+.success{background: #f0fff4; border-left: 5px solid #2ca02c; padding: 14px 18px; margin: 18px 0;}
+table{border-collapse: collapse; width: 100%; margin: 16px 0;}
+th,td{border: 1px solid #ccc; padding: 8px 10px; vertical-align: top;}
+th{background: #eef3f8;}
+code, pre{background: #f5f5f5; border-radius: 4px;}
+code{padding: 2px 4px;}
+pre{padding: 14px; overflow-x: auto;}
+.small{color:#666; font-size: 0.95em;}
+</style>
+</head>
+
+<body>
+
+<h1>Robust CVaR Portfolio 下一步实验计划 Plan</h1>
+
+<div class="box">
+<b>当前定位：</b> 当前 ETF10 / ETF20 / SP30 实验已经证明了状态依赖 Robust CVaR 的初步有效性，
+但它还不是严格意义上的“针对某一个指数成分股的投资组合实验”。下一步需要把实验升级为：
+<br><br>
+$$
+\boxed{
+\text{SP100 指数成分股组合实验 + SPY Benchmark + 传统 Baseline + }\kappa(s)\text{ 可解释性 + Bootstrap 显著性}
+}
+$$
+</div>
+
+<h2>0. 当前已有实验的角色重新定位</h2>
+
+<table>
+<tr><th>已有实验</th><th>当前本质</th><th>论文中建议角色</th></tr>
+<tr><td>ETF10</td><td>10 个跨资产 / 行业 ETF 的风险组合实验</td><td>初始主结果 / sanity check。可以说明模型在小型 ETF universe 中有效。</td></tr>
+<tr><td>ETF20</td><td>更多 ETF 的高度分散组合</td><td>边界案例。结果差异小，说明在高度分散 ETF 组合中 $\kappa(s)$ 的边际收益有限。</td></tr>
+<tr><td>SP30</td><td>近似股票池实验，但不是完整指数成分股主实验</td><td>股票 universe 稳健性验证。当前 C_manual 已经比 A 的 CVaR 下降约 10%。</td></tr>
+<tr><td>下一步 SP100</td><td>S&amp;P 500 成分股子集组合优化</td><td><b>新的主实验</b>。更符合正式金融组合优化论文。</td></tr>
+</table>
+
+<div class="warn">
+<b>重要提醒：</b> 如果只使用“当前 S&amp;P 500 成分股并回填历史价格”，会有 survivorship bias。
+短期可以作为 Version A 实验，但论文中要如实说明；更严格版本应使用历史动态成分股。
+</div>
+
+<h2>1. 下一步总目标</h2>
+
+<h3>1.1 研究问题</h3>
+<p>下一步实验要回答：</p>
+$$
+\boxed{
+\text{在同一个指数成分股股票池中，状态依赖 }\kappa(s)
+\text{ 是否能比普通 CVaR 和固定 Robust CVaR 更好地控制尾部风险？}
+}
+$$
+
+<h3>1.2 主模型</h3>
+<p>继续以 C_manual 作为主模型：</p>
+$$
+\kappa(s_t)
+=
+1+\kappa_{\max}
+\sigma
+\left(
+\beta_1 \widetilde{Vol}_t
++
+\beta_2 \widetilde{DD}_t
++
+\beta_3 \widetilde{Mom}_t
++
+\beta_4 \widetilde{Corr}_t
+\right).
+$$
+
+<p>优化目标为：</p>
+$$
+\min_{w_t \in \Delta^N}
+RCVaR_{\alpha,\kappa(s_t)}
+\left(
+\left\{
+-w_t^\top r_\tau
++
+c\|w_t-w_{t-1}\|_1
+\right\}_{\tau=t-M}^{t-1}
+\right).
+$$
+
+<h3>1.3 成功标准</h3>
+<div class="success">
+<b>最低成功标准：</b>
+$$
+CVaR(C_{\text{manual}}) < CVaR(A)
+$$
+并且
+$$
+MDD(C_{\text{manual}}) < MDD(A).
+$$
+<br>
+<b>理想成功标准：</b>
+$$
+CVaR(C_{\text{manual}}) < CVaR(A), CVaR(B), CVaR(D), CVaR(\text{Historical CVaR}), CVaR(\text{Mean-Variance}).
+$$
+</div>
+
+<h2>2. 实验 1：SP100 指数成分股主实验</h2>
+
+<h3>2.1 数据是什么？</h3>
+<table>
+<tr><th>项目</th><th>设计</th></tr>
+<tr><td>股票池</td><td>S&amp;P 500 中选 100 只股票。</td></tr>
+<tr><td>选择方式</td><td>优先按行业分层 + 数据完整性筛选；也可先按市值前 100 做调试。</td></tr>
+<tr><td>时间范围</td><td>2010–2024。</td></tr>
+<tr><td>Train</td><td>2010–2017，用于 learned $\kappa_\theta$ 或参数学习。</td></tr>
+<tr><td>Validation</td><td>2018–2019，用于调 $\beta$、$\kappa_{\max}$、D 模型参数。</td></tr>
+<tr><td>Test</td><td>2020–2024，样本外主结果。</td></tr>
+<tr><td>频率</td><td>日频收益，月度调仓。</td></tr>
+</table>
+
+<h3>2.2 代码需要做什么？</h3>
+<pre><code>configs/
+    sp100.yaml
+
+data/
+    processed/sp100/
+        prices.csv
+        returns.csv
+        splits.json
+        universe.csv
+
+outputs/v3/sp100/
+    state_matrix.npy
+    kappa_series.csv
+    rolling_results.csv
+    cvar_table.csv
+    nav_curve.png
+    drawdown.png</code></pre>
+
+<p>新增或扩展数据加载逻辑：</p>
+<pre><code>def load_sp100_universe(config):
+    # 1. 读取 S&amp;P 500 候选股票列表
+    # 2. 按行业 / 市值 / 数据完整性筛选 100 只
+    # 3. 下载或读取价格数据
+    # 4. 对齐交易日
+    # 5. 计算收益率
+    # 6. 输出 prices.csv, returns.csv, universe.csv
+    return prices, returns, universe</code></pre>
+
+<h3>2.3 要跑哪些模型？</h3>
+<table>
+<tr><th>模型</th><th>设定</th><th>论文角色</th></tr>
+<tr><td>A_no_kappa</td><td>$\kappa=1$</td><td>普通 CVaR baseline。</td></tr>
+<tr><td>B_fixed_kappa</td><td>$\kappa=2$</td><td>固定 Robust CVaR。</td></tr>
+<tr><td><b>C_manual_kappa</b></td><td>$\kappa=\kappa(s)$</td><td><b>主方法。</b></td></tr>
+<tr><td>D_state_action</td><td>$\kappa=\kappa(s,w)$</td><td>状态-动作扩展，用于 action noise 分析。</td></tr>
+<tr><td>C_learned_kappa</td><td>$\kappa_\theta(s)$</td><td>future work / 消融，不作为主贡献。</td></tr>
+</table>
+
+<h3>2.4 输出是什么？</h3>
+<pre><code>outputs/v3/sp100/
+    table1_main_results.csv
+    table2_ablation_results.csv
+    weights_A.csv
+    weights_B.csv
+    weights_C_manual.csv
+    weights_D.csv
+    kappa_series.csv
+    nav_curve.png
+    drawdown.png
+    cvar_table.csv
+    rolling_results.csv</code></pre>
+
+<h3>2.5 需要什么结果？</h3>
+<div class="success">
+如果 SP100 上仍然出现：
+$$
+CVaR(C_{\text{manual}}) < CVaR(A)
+$$
+并且相对下降达到 5%–10%，则可以作为论文新的主实验。
+</div>
+
+<h2>3. 实验 2：加入指数 Benchmark</h2>
+
+<h3>3.1 为什么要做？</h3>
+<p>当前 ETF10 / SP30 是“资产组合之间的比较”，但还没有明确回答：这个组合相对于实际指数表现如何。</p>
+<div class="box">
+下一步应加入 $SPY$ 或 S&amp;P 500 index return 作为 Benchmark。
+这不是为了做严格 index tracking，而是为了说明你的组合是 risk-control portfolio。
+</div>
+
+<h3>3.2 数据是什么？</h3>
+<table>
+<tr><th>Benchmark</th><th>说明</th></tr>
+<tr><td>SPY</td><td>最容易获取，可以作为 S&amp;P 500 ETF 基准。</td></tr>
+<tr><td>S&amp;P 500 index return</td><td>更标准，但数据获取可能更麻烦。</td></tr>
+</table>
+
+<h3>3.3 指标是什么？</h3>
+<table>
+<tr><th>指标</th><th>作用</th></tr>
+<tr><td>Ann.Return</td><td>年化收益。</td></tr>
+<tr><td>Ann.Vol</td><td>年化波动。</td></tr>
+<tr><td>Sharpe</td><td>风险调整收益。</td></tr>
+<tr><td>MDD</td><td>最大回撤。</td></tr>
+<tr><td>CVaR$_{5\%}$</td><td>主指标，尾部风险。</td></tr>
+<tr><td>Beta to SPY</td><td>市场暴露。</td></tr>
+<tr><td>Tracking Error</td><td>相对指数偏离程度。</td></tr>
+<tr><td>Information Ratio</td><td>相对指数收益 / 跟踪误差。</td></tr>
+</table>
+
+<h3>3.4 输出是什么？</h3>
+<pre><code>outputs/v3/sp100/
+    benchmark_comparison.csv
+    nav_vs_spy.png
+    drawdown_vs_spy.png
+    relative_return_vs_spy.png</code></pre>
+
+<h3>3.5 需要什么结果？</h3>
+<p>不要求组合收益一定超过 SPY。你的目标不是收益最大化，而是：</p>
+$$
+CVaR(C_{\text{manual}}) < CVaR(SPY)
+$$
+<p>以及：</p>
+$$
+MDD(C_{\text{manual}}) < MDD(SPY).
+$$
+
+<h2>4. 实验 3：补传统组合 Baseline</h2>
+
+<h3>4.1 为什么要做？</h3>
+<p>目前传统 baseline 较少，高水平审稿人会问：是否只比弱基线更好？所以必须补强经典组合模型。</p>
+
+<h3>4.2 需要补哪些 Baseline？</h3>
+<table>
+<tr><th>Baseline</th><th>数学逻辑</th><th>作用</th></tr>
+<tr><td>Equal Weight</td><td>$w_i=1/N$</td><td>最基本投资基线。</td></tr>
+<tr><td>Buy-and-Hold</td><td>初始等权，之后不主动调仓</td><td>真实投资参考。</td></tr>
+<tr><td>Mean-Variance</td><td>$\min_w w^\top \Sigma w - \lambda \mu^\top w$</td><td>传统 Markowitz。</td></tr>
+<tr><td>Historical CVaR</td><td>$\min_w CVaR_\alpha(-w^\top r)$</td><td>与你的 A/C 最直接对比。</td></tr>
+<tr><td>Risk Parity</td><td>各资产风险贡献相等</td><td>稳健投资常见基线。</td></tr>
+<tr><td>Max Diversification</td><td>最大化组合分散化比率</td><td>分散化基线。</td></tr>
+</table>
+
+<h3>4.3 代码输出</h3>
+<pre><code>outputs/v3/sp100/
+    baseline_metrics.csv
+    all_methods_table.csv
+    all_methods_nav.png
+    all_methods_drawdown.png</code></pre>
+
+<h3>4.4 成功标准</h3>
+<div class="success">
+主方法至少应在尾部风险上优于主要传统 baseline：
+$$
+CVaR(C_{\text{manual}})
+<
+CVaR(\text{Historical CVaR}),
+CVaR(\text{Mean-Variance}),
+CVaR(\text{Equal Weight}).
+$$
+</div>
+
+<h2>5. 实验 4：$\kappa(s)$ 可解释性实验</h2>
+
+<h3>5.1 为什么要做？</h3>
+<p>审稿人会问：$\kappa(s)$ 是否只是人为调参？它是否真的和市场状态有关？</p>
+<div class="box">
+这一步的目标是证明：$\kappa(s)$ 会在高波动、高回撤、危机阶段上升，从而动态扩大 worst-case tail risk envelope。
+</div>
+
+<h3>5.2 输入数据</h3>
+<pre><code>outputs/v3/sp100/
+    kappa_series.csv
+    state_matrix.npy
+    rolling_results.csv</code></pre>
+
+<h3>5.3 要画什么图？</h3>
+<table>
+<tr><th>图</th><th>内容</th><th>论文作用</th></tr>
+<tr><td>fig3_kappa_time_series.png</td><td>$\kappa_t$ 时间序列，并标注 2020 / 2022 危机阶段</td><td>说明风险预算随市场危机上升。</td></tr>
+<tr><td>fig4_kappa_vs_volatility.png</td><td>$\kappa_t$ vs volatility</td><td>说明波动越高，鲁棒程度越高。</td></tr>
+<tr><td>fig5_kappa_vs_drawdown.png</td><td>$\kappa_t$ vs drawdown</td><td>说明回撤越严重，尾部风险预算越高。</td></tr>
+</table>
+
+<h3>5.4 需要什么结果？</h3>
+$$
+Vol_t \uparrow \Rightarrow \kappa(s_t) \uparrow,
+$$
+$$
+DD_t \uparrow \Rightarrow \kappa(s_t) \uparrow,
+$$
+$$
+\text{Crisis Period} \Rightarrow \kappa(s_t)\text{ rises}.
+$$
+
+<h2>6. 实验 5：统计显著性和稳健性检验</h2>
+
+<h3>6.1 为什么要做？</h3>
+<p>单次回测表格不能充分证明方法稳健。需要说明 CVaR 的改善不是偶然样本结果。</p>
+
+<h3>6.2 输入数据</h3>
+<pre><code>outputs/v3/sp100/
+    rolling_results.csv
+    all_methods_table.csv</code></pre>
+
+<h3>6.3 需要做的检验</h3>
+<table>
+<tr><th>检验</th><th>做法</th><th>输出</th></tr>
+<tr><td>Block Bootstrap CVaR CI</td><td>对日度损失序列做 block bootstrap，重复 500–1000 次</td><td>bootstrap_cvar_ci.csv</td></tr>
+<tr><td>Paired Tail-Loss Comparison</td><td>比较 $L_C-L_A$ 在尾部样本中的分布</td><td>cvar_difference_test.csv</td></tr>
+<tr><td>Crisis Subsample Test</td><td>单独统计 2020、2022 危机阶段指标</td><td>crisis_subsample_table.csv</td></tr>
+</table>
+
+<h3>6.4 成功标准</h3>
+<div class="success">
+如果 bootstrap 中：
+$$
+P(CVaR_C < CVaR_A) > 90\%
+$$
+或者 $CVaR_C-CVaR_A$ 的置信区间大部分小于 0，则显著性较有说服力。
+</div>
+
+<h2>7. 最终论文级输出目录</h2>
+
+<pre><code>outputs/v3/sp100_final/
+    table1_main_results.csv
+    table2_ablation_results.csv
+    table3_baseline_comparison.csv
+    table4_crisis_subsample.csv
+    table5_bootstrap_ci.csv
+
+    fig1_nav_vs_benchmark.png
+    fig2_drawdown_vs_benchmark.png
+    fig3_kappa_time_series.png
+    fig4_kappa_vs_vol_dd.png
+    fig5_cvar_difference_bootstrap.png
+
+    weights_C_manual.csv
+    kappa_series.csv
+    rolling_results_all_methods.csv</code></pre>
+
+<h2>8. 论文结构对应关系</h2>
+
+<table>
+<tr><th>输出</th><th>论文位置</th><th>说明</th></tr>
+<tr><td>table1_main_results.csv</td><td>Main Results</td><td>SP100 主实验，A/B/C/D/C_learned 对比。</td></tr>
+<tr><td>table2_ablation_results.csv</td><td>Ablation Study</td><td>检验 $\kappa$ 是否有效，C 是否优于 A/B/D。</td></tr>
+<tr><td>table3_baseline_comparison.csv</td><td>Baseline Comparison</td><td>和 MV、Historical CVaR、Risk Parity 等传统方法比较。</td></tr>
+<tr><td>table4_crisis_subsample.csv</td><td>Crisis Analysis</td><td>2020 COVID 和 2022 高波动阶段表现。</td></tr>
+<tr><td>table5_bootstrap_ci.csv</td><td>Robustness</td><td>CVaR 改善的置信区间和稳定性。</td></tr>
+<tr><td>fig3_kappa_time_series.png</td><td>Interpretability</td><td>说明 $\kappa(s)$ 在危机期动态上升。</td></tr>
+</table>
+
+<h2>9. 7 天执行计划</h2>
+
+<table>
+<tr><th>时间</th><th>任务</th><th>输出</th></tr>
+<tr><td>Day 1</td><td>构建 SP100 universe，生成 prices / returns / splits。</td><td><code>data/processed/sp100/</code></td></tr>
+<tr><td>Day 2</td><td>跑 A/B/C/D/C_learned 主消融。</td><td><code>cvar_table.csv</code>, <code>rolling_results.csv</code></td></tr>
+<tr><td>Day 3</td><td>加入 SPY benchmark。</td><td><code>benchmark_comparison.csv</code>, <code>nav_vs_spy.png</code></td></tr>
+<tr><td>Day 4</td><td>补传统 baseline。</td><td><code>baseline_metrics.csv</code>, <code>all_methods_table.csv</code></td></tr>
+<tr><td>Day 5</td><td>画 $\kappa(s)$ 可解释性图。</td><td><code>fig3_kappa_time_series.png</code>, <code>fig4_kappa_vs_vol_dd.png</code></td></tr>
+<tr><td>Day 6</td><td>做 bootstrap 和 crisis subsample。</td><td><code>bootstrap_cvar_ci.csv</code>, <code>crisis_subsample_table.csv</code></td></tr>
+<tr><td>Day 7</td><td>整合论文主表和实验 Section 初稿。</td><td><code>sp100_final/</code>, Experiment Section draft</td></tr>
+</table>
+
+<h2>10. 最终判断标准</h2>
+
+<div class="box">
+完成本计划后，如果出现以下结果：
+<br><br>
+1. SP100 上 $C_{\text{manual}}$ 的 CVaR 低于 A；<br>
+2. $C_{\text{manual}}$ 的 MDD 低于 A；<br>
+3. 相对 SPY 或传统 baseline 具有更好的尾部风险控制；<br>
+4. $\kappa(s)$ 在危机期上升并具有可解释性；<br>
+5. Bootstrap 显示 CVaR 改善具有稳定性；<br><br>
+则论文可以进入正式投稿级写作。
+</div>
+
+</body>
+</html>
