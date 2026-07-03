@@ -27,6 +27,22 @@ def loss_samples(
     return -gross + cost_rate * to
 
 
+def _risk_objective(
+    w: np.ndarray,
+    hist_returns: pd.DataFrame,
+    features: pd.DataFrame,
+    w_prev: np.ndarray,
+    engine: RiskEngine,
+    cost_rate: float,
+    hhi_penalty: float,
+) -> float:
+    losses = loss_samples(w, hist_returns.values, w_prev, cost_rate)
+    risk, _ = engine.portfolio_risk(losses, features, w)
+    if hhi_penalty > 0:
+        risk += hhi_penalty * float(np.sum(w**2))
+    return risk
+
+
 def optimize_portfolio(
     hist_returns: pd.DataFrame,
     features: pd.DataFrame,
@@ -34,20 +50,42 @@ def optimize_portfolio(
     engine: RiskEngine,
     cost_rate: float = 0.001,
     maxiter: int = 150,
+    weight_cap: float | None = None,
+    hhi_penalty: float = 0.0,
 ) -> tuple[np.ndarray, float, float]:
     n = hist_returns.shape[1]
     equal = np.full(n, 1.0 / n)
 
-    def objective(logits: np.ndarray) -> float:
-        w = softmax(logits)
-        losses = loss_samples(w, hist_returns.values, w_prev, cost_rate)
-        risk, _ = engine.portfolio_risk(losses, features, w)
-        return risk
+    if weight_cap is not None:
+        u = float(min(weight_cap, 1.0))
+        if u * n < 1.0 - 1e-9:
+            u = 1.0 / n
+        bounds = [(0.0, u)] * n
+        x0 = np.clip(equal, 0.0, u)
+        x0 = x0 / x0.sum()
+        cons = {"type": "eq", "fun": lambda w: float(np.sum(w) - 1.0)}
+        result = minimize(
+            lambda w: _risk_objective(w, hist_returns, features, w_prev, engine, cost_rate, hhi_penalty),
+            x0,
+            method="SLSQP",
+            bounds=bounds,
+            constraints=cons,
+            options={"maxiter": maxiter},
+        )
+        w_opt = result.x if result.success else x0
+        w_opt = np.clip(w_opt, 0.0, u)
+        w_opt = w_opt / w_opt.sum()
+    else:
 
-    result = minimize(objective, np.zeros(n), method="L-BFGS-B", options={"maxiter": maxiter})
-    w_opt = softmax(result.x if result.success else np.zeros(n))
-    if not result.success:
-        w_opt = equal
+        def objective(logits: np.ndarray) -> float:
+            w = softmax(logits)
+            return _risk_objective(w, hist_returns, features, w_prev, engine, cost_rate, hhi_penalty)
+
+        result = minimize(objective, np.zeros(n), method="L-BFGS-B", options={"maxiter": maxiter})
+        w_opt = softmax(result.x if result.success else np.zeros(n))
+        if not result.success:
+            w_opt = equal
+
     losses = loss_samples(w_opt, hist_returns.values, w_prev, cost_rate)
     risk, kappa = engine.portfolio_risk(losses, features, w_opt)
     return w_opt, risk, float(kappa[-1])

@@ -1,0 +1,22 @@
+{
+  "dataset": "sp100",
+  "selected_params": {
+    "dataset": "sp100",
+    "kappa_max": 1.0,
+    "weight_cap": 0.1,
+    "rho": 0.7,
+    "default_kappa_max": 1.0,
+    "selection_objective": {
+      "lambda_turnover": 0.001,
+      "lambda_hhi": 0.01
+    },
+    "elapsed_sec": 23620.45081424713
+  },
+  "A_cvar": 0.02469833995909896,
+  "B_cvar": 0.0265794580262653,
+  "C_calibrated_cvar": 0.029171287822253294,
+  "C_stable_cvar": 0.02547973645632812,
+  "C_calibrated_beats_A": false,
+  "C_stable_beats_min_AB": false,
+  "elapsed_sec": 19601.454494953156
+}

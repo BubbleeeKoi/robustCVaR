@@ -1,0 +1,22 @@
+{
+  "dataset": "sp30",
+  "selected_params": {
+    "dataset": "sp30",
+    "kappa_max": 1.25,
+    "weight_cap": null,
+    "rho": 0.7,
+    "default_kappa_max": 1.0,
+    "selection_objective": {
+      "lambda_turnover": 0.001,
+      "lambda_hhi": 0.01
+    },
+    "elapsed_sec": 7574.088792562485
+  },
+  "A_cvar": 0.02723474724313741,
+  "B_cvar": 0.026011564720514743,
+  "C_calibrated_cvar": 0.026033095897959175,
+  "C_stable_cvar": 0.024419442914305575,
+  "C_calibrated_beats_A": true,
+  "C_stable_beats_min_AB": true,
+  "elapsed_sec": 9984.860518217087
+}

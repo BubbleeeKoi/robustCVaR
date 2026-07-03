@@ -1,0 +1,5 @@
+dataset,N,kappa_max,weight_cap,rho
+etf10,10,0.75,,0.7
+etf20,19,1.5,,
+sp30,29,1.25,,0.7
+sp100,100,1.0,0.1,0.7

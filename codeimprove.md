@@ -551,4 +551,103 @@ Val 最优为 **κ_max=1.0**，与默认相同，故 `C_calibrated` 与 `C_defau
 
 ---
 
-*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*
+## 13. V5：Validation-Calibrated State-Dependent RCVaR（2026-07-02）
+
+> 计划文件：`V5_next_implementation_plan.html`
+
+### 13.1 实现内容
+
+| 模块 | 改动 |
+|------|------|
+| `portfolio/optimizer.py` | 权重上限 `weight_cap`（SLSQP）、HHI 惩罚 |
+| `portfolio/rolling.py` | κ 平滑 `kappa_rho`、权重记录、cap 传递 |
+| `portfolio/weight_export.py` | 同步 cap / ρ 参数 |
+| `configs/v5_common.yaml` | 统一 val/test 划分、网格、目标函数系数 |
+| `experiments/v5_common.py` | 数据加载、引擎工厂、validation 目标 $J_{val}$ |
+| `experiments/audit_baselines.py` | Step 0：A vs Historical 权重/收益审计 |
+| `experiments/run_v5_calibration.py` | 分阶段 val 选参（κ_max → cap → ρ） |
+| `experiments/run_v5_test.py` | 固定参数跑 7 模型 + 图表 |
+| `experiments/run_v5_cross_market.py` | 四市场一键流水线 + 跨市场汇总表 |
+
+### 13.2 Validation 目标函数
+
+$$
+J_{\text{val}} = CVaR^{val}_{5\%} + 0.001\,\overline{Turn}^{val} + 0.01\,\overline{HHI}^{val}
+$$
+
+网格（所有市场统一）：
+- $\kappa_{\max}\in\{0.25,0.5,0.75,1.0,1.25,1.5\}$
+- $u\in\{0.05,0.08,0.10,\text{None}\}$
+- $\rho\in\{0.5,0.7,0.9,\text{None}\}$
+
+### 13.3 Test 模型集合
+
+| 模型 | 说明 |
+|------|------|
+| A_Historical_CVaR | plain_ceil（= Historical CVaR，审计已确认权重一致） |
+| B_fixed_kappa | κ=2 固定鲁棒 |
+| C_default | κ_max=1.0 未校准 |
+| C_calibrated | val 选 κ_max* |
+| C_cap | C_calibrated + 权重上限 u* |
+| C_smooth | C_calibrated + κ 平滑 ρ* |
+| C_stable | cap + smoothing 组合 |
+
+### 13.4 运行命令
+
+```powershell
+# 单市场
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/audit_baselines.py --dataset sp100
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v5_calibration.py --dataset sp100
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v5_test.py --dataset sp100
+
+# 四市场全流程（后台日志 outputs/v5_run_log.txt）
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v5_cross_market.py
+```
+
+### 13.5 输出目录
+
+```
+outputs/v5/
+  audit/                          # A vs Historical 审计
+  {etf10,etf20,sp30,sp100}/
+    validation/                   # kappa_max_grid, cap_grid, smoothing_grid, selected_params.json
+    test/                         # rolling_*, table_main.csv, test_summary.json
+    figures/                      # nav, drawdown, kappa, turnover
+  cross_market/                   # final_paper_table.csv 等
+```
+
+### 13.6 四市场最终结果（2026-07-03，总耗时 ~21.4 h）
+
+> 汇总表：`outputs/v5/cross_market/final_paper_table.csv`
+
+| 市场 | N | Val 选参 | A CVaR | B CVaR | C_calibrated | **C_stable** | 最低标准¹ | 强标准² |
+|------|---|----------|--------|--------|--------------|--------------|-----------|---------|
+| ETF10 | 10 | κ=0.75, ρ=0.7 | 1.84% | 1.96% | **1.74%** | 1.92% | ✓ | ✗ |
+| ETF20 | 19 | κ=1.5 | 1.49% | 1.50% | 1.62% | 1.62% | ✗ | ✗ |
+| SP30 | 29 | κ=1.25, ρ=0.7 | 2.72% | 2.60% | 2.60% | **2.44%** | ✓ | ✓ |
+| SP100 | 100 | κ=1.0, cap=10%, ρ=0.7 | **2.47%** | 2.66% | 2.92% | 2.55% | ✗ | ✗ |
+
+¹ $CVaR(C_{calibrated}) < CVaR(A)$；² $CVaR(C_{stable}) < \min\{CVaR(A), CVaR(B)\}$
+
+**SP100 细节（Test 2020–2024）：**
+
+| 模型 | CVaR | MaxDD | 换手 |
+|------|------|-------|------|
+| A_Historical | **2.47%** | 25.1% | 0.038 |
+| B_fixed | 2.66% | 25.6% | 0.020 |
+| C_default / C_calibrated | 2.92% | 35.7% | 0.023 |
+| C_cap (u=10%) | 2.50% | 27.1% | 0.016 |
+| C_smooth (ρ=0.7) | 2.77% | 29.8% | 0.032 |
+| C_stable (cap+ρ) | 2.55% | 28.7% | 0.016 |
+
+### 13.7 结论与论文写法
+
+1. **A ≡ Historical** 四市场审计均通过（权重 diff=0）。
+2. **V5 在低/中维有效**：ETF10 `C_calibrated` 优于 A；SP30 `C_stable` 达强成功标准（2.44% < min(A,B)）。
+3. **SP100 仍困难**：仅 κ_max 校准时 C 与 C_default 相同（val 选 κ=1.0）；加 cap=10%+ρ=0.7 后 `C_stable` CVaR 2.55% 仍劣于 A 2.47%，但换手从 0.038 降至 0.016、MDD 从 35.7% 改善（C_default 路径）。
+4. **cap 是 SP100 关键**：`C_cap`（2.50%）接近 A，说明权重上限比单纯调 κ_max 更重要。
+5. **论文主线**：状态依赖 RCVaR 有效，但高维市场需 validation calibration + 稳定性控制（cap）；可如实报告 SP100 为边界案例。
+
+---
+
+*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*

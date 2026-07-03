@@ -1,0 +1,12 @@
+{
+  "dataset": "sp30",
+  "kappa_max": 1.25,
+  "weight_cap": null,
+  "rho": 0.7,
+  "default_kappa_max": 1.0,
+  "selection_objective": {
+    "lambda_turnover": 0.001,
+    "lambda_hhi": 0.01
+  },
+  "elapsed_sec": 7574.088792562485
+}

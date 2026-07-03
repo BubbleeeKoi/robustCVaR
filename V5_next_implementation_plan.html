@@ -668,16 +668,16 @@ python robust_cvar_portfolio/experiments/run_v5_cross_market.py
 <th>Best?</th>
 </tr>
 <tr>
-<td>ETF10</td><td>10</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+<td>ETF10</td><td>10</td><td>0.75</td><td>—</td><td>0.7</td><td>1.84%</td><td>1.96%</td><td>1.74%</td><td><b>1.74%</b></td><td>1.92%</td><td>C_cal ✓</td>
 </tr>
 <tr>
-<td>ETF20</td><td>20</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+<td>ETF20</td><td>19</td><td>1.5</td><td>—</td><td>—</td><td><b>1.49%</b></td><td>1.50%</td><td>1.55%</td><td>1.62%</td><td>1.62%</td><td>A ✓</td>
 </tr>
 <tr>
-<td>SP30</td><td>29/30</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+<td>SP30</td><td>29</td><td>1.25</td><td>—</td><td>0.7</td><td>2.72%</td><td>2.60%</td><td>2.50%</td><td>2.60%</td><td><b>2.44%</b></td><td>C_stable ✓✓</td>
 </tr>
 <tr>
-<td>SP100</td><td>100</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
+<td>SP100</td><td>100</td><td>1.0</td><td>10%</td><td>0.7</td><td><b>2.47%</b></td><td>2.66%</td><td>2.92%</td><td>2.92%</td><td>2.55%</td><td>A ✓</td>
 </tr>
 </table>
 
@@ -712,7 +712,7 @@ The amplitude parameter $\kappa_{\max}$ is treated as a hyperparameter and selec
 In high-dimensional stock universes, a default state-dependent ambiguity budget may induce excessive turnover and concentrated portfolios. This motivates the validation-calibrated and stability-regularized version of the proposed model.
 </div>
 
-<h2>14. 最终结论</h2>
+<h2>14. 最终结论（计划阶段）</h2>
 
 <div class="good">
 下一步不是“每个市场随便调 $\kappa_{\max}$”，而是建立一个固定、可复现、没有 test leakage 的校准协议：
@@ -735,6 +735,183 @@ $$
 }
 $$
 </div>
+
+<h2>15. V5 实验结果（2026-07-03）</h2>
+
+<div class="good">
+<b>状态：已全部跑完。</b> 四市场流水线（audit → calibration → test → cross_market）总耗时约 <b>21.4 小时</b>（1281.6 min）。
+<br><br>
+命令：<code>python robust_cvar_portfolio/experiments/run_v5_cross_market.py</code>
+<br>
+日志：<code>robust_cvar_portfolio/outputs/v5_run_log.txt</code>
+<br>
+主表：<code>robust_cvar_portfolio/outputs/v5/cross_market/final_paper_table.csv</code>
+</div>
+
+<h3>15.1 Step 0：Baseline Audit</h3>
+
+<p>四市场均确认 <code>A_Historical_CVaR ≡ Historical_CVaR</code>：</p>
+
+<table>
+<tr><th>市场</th><th>max &#124;w<sub>A</sub> − w<sub>Hist</sub>&#124;</th><th>net_return 相关系数</th><th>Test CVaR (A)</th></tr>
+<tr><td>ETF10</td><td>0</td><td>1.000</td><td>1.84%</td></tr>
+<tr><td>ETF20</td><td>0</td><td>1.000</td><td>1.49%</td></tr>
+<tr><td>SP30</td><td>0</td><td>1.000</td><td>2.72%</td></tr>
+<tr><td>SP100</td><td>0</td><td>1.000</td><td>2.47%</td></tr>
+</table>
+
+<p class="small">输出目录：<code>robust_cvar_portfolio/outputs/v5/audit/</code></p>
+
+<h3>15.2 Validation 选参结果</h3>
+
+<table>
+<tr><th>市场</th><th>$\kappa_{\max}^*$</th><th>cap $u^*$</th><th>$\rho^*$</th><th>说明</th></tr>
+<tr><td>ETF10</td><td>0.75</td><td>None</td><td>0.7</td><td>略降 κ 幅度 + 平滑有效</td></tr>
+<tr><td>ETF20</td><td>1.5</td><td>None</td><td>None</td><td>cap/ρ 未改善 $J_{val}$</td></tr>
+<tr><td>SP30</td><td>1.25</td><td>None</td><td>0.7</td><td>中等维：κ 略升 + 平滑</td></tr>
+<tr><td>SP100</td><td>1.0</td><td><b>10%</b></td><td>0.7</td><td>κ 与默认相同；<b>cap 是关键增量</b></td></tr>
+</table>
+
+<p>Validation 目标（所有市场统一）：</p>
+$$
+J_{\text{val}} = CVaR^{val}_{5\%} + 0.001\,\overline{Turn}^{val} + 0.01\,\overline{HHI}^{val}
+$$
+
+<p class="small">各市场网格明细：<code>outputs/v5/{dataset}/validation/kappa_max_grid.csv</code>、<code>cap_grid.csv</code>、<code>smoothing_grid.csv</code></p>
+
+<h3>15.3 Test 成功标准对照（§10，2020–2024）</h3>
+
+<h4>15.3.1 最低标准：$CVaR(C_{calibrated}) < CVaR(A)$</h4>
+
+<table>
+<tr><th>市场</th><th>A</th><th>C_calibrated</th><th>达标？</th></tr>
+<tr><td>ETF10</td><td>1.84%</td><td><b>1.74%</b></td><td class="good" style="padding:8px;">✓</td></tr>
+<tr><td>ETF20</td><td><b>1.49%</b></td><td>1.62%</td><td class="bad" style="padding:8px;">✗</td></tr>
+<tr><td>SP30</td><td>2.72%</td><td>2.60%</td><td class="good" style="padding:8px;">✓</td></tr>
+<tr><td>SP100</td><td><b>2.47%</b></td><td>2.92%</td><td class="bad" style="padding:8px;">✗（= C_default）</td></tr>
+</table>
+
+<h4>15.3.2 强标准：$CVaR(C_{stable}) < \min\{CVaR(A), CVaR(B)\}$</h4>
+
+<table>
+<tr><th>市场</th><th>min(A,B)</th><th>C_stable</th><th>达标？</th></tr>
+<tr><td>ETF10</td><td>1.84%</td><td>1.92%</td><td class="bad" style="padding:8px;">✗</td></tr>
+<tr><td>ETF20</td><td>1.49%</td><td>1.62%</td><td class="bad" style="padding:8px;">✗</td></tr>
+<tr><td>SP30</td><td>2.60%</td><td><b>2.44%</b></td><td class="good" style="padding:8px;">✓</td></tr>
+<tr><td>SP100</td><td>2.47%</td><td>2.55%</td><td class="bad" style="padding:8px;">✗</td></tr>
+</table>
+
+<div class="warn">
+<b>汇总：</b> 最低标准 2/4 市场达标；强标准仅 <b>SP30</b> 达标。Bootstrap 显著性（§10.3）本次 V5 未跑。
+</div>
+
+<h3>15.4 SP100 全模型 Test 明细（主战场）</h3>
+
+<p>Val 固定：$\kappa_{\max}^*=1.0$，$u^*=10\%$，$\rho^*=0.7$。</p>
+
+<table>
+<tr><th>模型</th><th>CVaR 5%</th><th>MaxDD</th><th>平均换手</th><th>Sharpe</th></tr>
+<tr><td>A_Historical_CVaR</td><td><b>2.47%</b></td><td>25.1%</td><td>0.038</td><td><b>0.44</b></td></tr>
+<tr><td>B_fixed_kappa</td><td>2.66%</td><td>25.6%</td><td>0.020</td><td>0.29</td></tr>
+<tr><td>C_default / C_calibrated</td><td>2.92%</td><td>35.7%</td><td>0.023</td><td>0.11</td></tr>
+<tr><td>C_cap ($u=10\%$)</td><td>2.50%</td><td>27.1%</td><td>0.016</td><td>0.04</td></tr>
+<tr><td>C_smooth ($\rho=0.7$)</td><td>2.77%</td><td>29.8%</td><td>0.032</td><td>-0.07</td></tr>
+<tr><td>C_stable (cap+ρ)</td><td>2.55%</td><td>28.7%</td><td>0.016</td><td>-0.03</td></tr>
+</table>
+
+<div class="box">
+<b>SP100 机制解读（与 V4 诊断一致）：</b>
+<ul>
+<li>仅调 $\kappa_{\max}$ 无效：C_calibrated 与 C_default 轨迹完全相同（2.92%）。</li>
+<li><b>权重上限</b>是主要增量：C_cap 将 CVaR 从 2.92% 压至 2.50%，与 A 差距仅 3 bp；换手从 0.038 降至 0.016。</li>
+<li>C_stable 稳定性达标（换手、单权重 ~9.9%），但 CVaR 仍略劣于 A；C 系列 Sharpe 显著低于 A。</li>
+</ul>
+</div>
+
+<p class="small">SP100 输出：<code>outputs/v5/sp100/test/table_main.csv</code>、<code>stability_diagnostics.csv</code>、<code>figures/</code></p>
+
+<h3>15.5 分市场解读 vs 计划预判（§4.1）</h3>
+
+<table>
+<tr><th>市场</th><th>计划预判</th><th>实际结果</th><th>论文角色</th></tr>
+<tr>
+<td>ETF10</td><td>低维，$\kappa_{\max}=1$ 可能稳定</td>
+<td>Val 选 κ=0.75；C_calibrated 1.74% &lt; A 1.84%</td>
+<td>辅助正面案例</td>
+</tr>
+<tr>
+<td>ETF20</td><td>κ 边际作用弱</td>
+<td>A 全面最优；动态 κ 无增量</td>
+<td>负例 / robustness</td>
+</tr>
+<tr>
+<td>SP30</td><td>状态依赖 κ 可能有效</td>
+<td>C_stable 2.44% 击败 A 与 B（强标准）</td>
+<td><b>主实证案例</b></td>
+</tr>
+<tr>
+<td>SP100</td><td>需 calibration + 集中度控制</td>
+<td>cap 接近 A 但未超越；κ  alone 失败</td>
+<td>边界案例 + Discussion</td>
+</tr>
+</table>
+
+<h3>15.6 与 §14 预期叙事的对照</h3>
+
+<div class="good">
+<b>已验证：</b>
+<ul>
+<li>固定、可复现、无 test leakage 的 validation calibration 协议跑通。</li>
+<li>论文主线可升级为：“状态依赖鲁棒 CVaR 在中低维有效；高维需 stability control，但未必超越 Historical CVaR。”</li>
+<li>V4 诊断闭环：SP100 上 cap 比 κ 校准更重要。</li>
+</ul>
+</div>
+
+<div class="bad">
+<b>未完全达成：</b>
+<ul>
+<li>非所有市场 $CVaR(C_{calibrated}) < CVaR(A)$（ETF20、SP100 失败）。</li>
+<li>强标准仅 SP30 一家达标。</li>
+<li>SP100 C_stable CVaR 2.55% 仍 &gt; A 2.47%；Sharpe 大幅落后。</li>
+<li>Table 5 Bootstrap 待补跑。</li>
+</ul>
+</div>
+
+<h3>15.7 论文建议（基于实测）</h3>
+
+<table>
+<tr><th>表</th><th>建议内容</th></tr>
+<tr><td>Table 1（主结果）</td><td>以 <b>SP30</b> 为主：C_stable vs A/B/C_default 全指标</td></tr>
+<tr><td>Table 2（跨市场）</td><td>§12 已填写的四市场 CVaR 对比 + Val 选参列</td></tr>
+<tr><td>Table 3（选参）</td><td><code>cross_market/selected_params_by_dataset.csv</code></td></tr>
+<tr><td>Table 4（稳定性）</td><td>SP100 换手 / HHI / max weight；链到 V4 诊断</td></tr>
+<tr><td>Table 5（Bootstrap）</td><td>待补：$P(CVaR_C &lt; CVaR_A)$，优先 SP30 + ETF10</td></tr>
+</table>
+
+<div class="box">
+<b>Discussion 可写（英文）：</b><br>
+In high-dimensional stock universes, validation-calibrated state-dependent RCVaR with a weight cap substantially improves upon the uncalibrated variant and reduces turnover, but may still not dominate plain historical CVaR out of sample. The proposed calibration protocol remains useful for reproducible hyperparameter selection across asset universes.
+</div>
+
+<h3>15.8 关键输出文件索引</h3>
+
+<table>
+<tr><th>路径</th><th>内容</th></tr>
+<tr><td><code>outputs/v5/cross_market/final_paper_table.csv</code></td><td>跨市场论文主表</td></tr>
+<tr><td><code>outputs/v5/{dataset}/validation/selected_params.json</code></td><td>各市场 Val 选定参数</td></tr>
+<tr><td><code>outputs/v5/{dataset}/test/table_main.csv</code></td><td>7 模型 Test 全指标</td></tr>
+<tr><td><code>outputs/v5/{dataset}/test/test_summary.json</code></td><td>成功标准布尔判定</td></tr>
+<tr><td><code>outputs/v5/{dataset}/figures/*.png</code></td><td>NAV、drawdown、κ、换手图</td></tr>
+<tr><td><code>codeimprove.md §13</code></td><td>与本文同步的文字摘要</td></tr>
+</table>
+
+<h2>16. 后续可选（V5+）</h2>
+
+<ol>
+<li>补跑 Bootstrap 显著性（§10.3，优先 SP30 / ETF10）。</li>
+<li>SP100：更细 cap 网格（如 8%）、优化器内 HHI 惩罚、sector cap（V4 建议）。</li>
+<li>将 §15 主表/图写入 LaTeX 或论文草稿。</li>
+</ol>
 
 </body>
 </html>

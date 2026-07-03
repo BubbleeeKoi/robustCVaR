@@ -1,0 +1,22 @@
+{
+  "dataset": "etf20",
+  "selected_params": {
+    "dataset": "etf20",
+    "kappa_max": 1.5,
+    "weight_cap": null,
+    "rho": null,
+    "default_kappa_max": 1.0,
+    "selection_objective": {
+      "lambda_turnover": 0.001,
+      "lambda_hhi": 0.01
+    },
+    "elapsed_sec": 3772.4627113342285
+  },
+  "A_cvar": 0.014927706397436954,
+  "B_cvar": 0.015038764542449016,
+  "C_calibrated_cvar": 0.016237771415805763,
+  "C_stable_cvar": 0.016237771415805763,
+  "C_calibrated_beats_A": false,
+  "C_stable_beats_min_AB": false,
+  "elapsed_sec": 7727.784934520721
+}
