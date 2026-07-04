@@ -1,0 +1,29 @@
+# V6 equity-only protocol (SP30 / SP100 / Random30)
+validation:
+  start: "2018-01-01"
+  end: "2019-12-31"
+
+test:
+  start: "2020-01-01"
+  end: "2024-12-31"
+
+# Reduced grid for random30 (V6 plan §3.4)
+kappa_max_grid: [0.75, 1.0, 1.25]
+weight_cap_grid: [0.10, 0.15, null]
+rho_grid: [0.7, null]
+
+selection_objective:
+  lambda_turnover: 0.001
+  lambda_hhi: 0.01
+
+random30:
+  n_universes: 3
+  n_assets: 30
+  source: sp100
+  seeds: [42, 123, 456]
+
+bootstrap:
+  n_boot: 500
+  block_size: 20
+
+equity_datasets: [sp30, sp100]

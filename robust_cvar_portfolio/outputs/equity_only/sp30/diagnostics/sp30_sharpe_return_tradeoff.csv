@@ -1,0 +1,3 @@
+comparison,delta_cvar_pct,delta_sharpe,delta_ann_return_pct,delta_maxdd_pct,delta_turnover,interpretation
+C_stable vs A,-0.28153043288319,0.1227809478280401,1.8688717178604701,-1.3798568328565186,-0.001052605512288602,CVaR improved; Sharpe higher than A but lower than B
+C_stable vs B,-0.15921218062092019,-0.0776241273683747,-5.805880621434169,0.45302074954313987,-0.004894549145491502,C_stable beats B on CVaR; Sharpe lower than B

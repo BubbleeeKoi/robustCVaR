@@ -1,0 +1,15 @@
+gap,feature,correlation,n
+gap_C_default,hhi_C_stable,0.463009132733515,58
+gap_C_default,max_weight_C_stable,0.20701241600328515,58
+gap_C_default,turnover_C_stable,0.08921832208737078,58
+gap_C_default,avg_correlation,0.781306427065647,58
+gap_C_default,pc1_share,0.43419279206117267,58
+gap_C_default,effective_dimension,-0.3625753158012194,58
+gap_C_default,vol_dispersion,-0.0028348728071346686,58
+gap_C_stable,hhi_C_stable,-0.1753340510984283,58
+gap_C_stable,max_weight_C_stable,-0.11615203297142454,58
+gap_C_stable,turnover_C_stable,-0.03851786404908514,58
+gap_C_stable,avg_correlation,-0.24970643837190287,58
+gap_C_stable,pc1_share,-0.20171355912876843,58
+gap_C_stable,effective_dimension,0.20420821630838856,58
+gap_C_stable,vol_dispersion,0.01911313923609807,58

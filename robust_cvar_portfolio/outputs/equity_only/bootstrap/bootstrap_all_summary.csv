@@ -1,0 +1,6 @@
+comparison,mean_cvar_diff_b_minus_a,ci_lo,ci_hi,prob_b_lt_a,interpretation,dataset,n_universes,win_rate_A,mean_delta_A_pp,median_delta_A_pp
+SP30: C_stable vs A,-0.002850007553556795,-0.004832191699514491,-0.0011861994353777408,1.0,prob_b_lt_a = P(CVaR_B < CVaR_A),sp30,,,,
+SP30: C_stable vs B,-0.0015734264521997143,-0.0044160191588071196,0.00017673752820084222,0.94,prob_b_lt_a = P(CVaR_B < CVaR_A),sp30,,,,
+SP100: C_stable vs C_default,-0.0036138262286269165,-0.007951927250075454,-0.00023767494895532947,0.98,prob_b_lt_a = P(CVaR_B < CVaR_A),sp100,,,,
+SP100: C_stable vs A,0.0007930226704292485,-0.0011707125417777045,0.003197046954226675,0.246,prob_b_lt_a = P(CVaR_B < CVaR_A),sp100,,,,
+Random30 pooled: C_stable vs A,,,,1.0,win_rate as pooled P(CVaR_C < CVaR_A) across universes,random30,3.0,1.0,0.21795354808475997,0.21133978420929

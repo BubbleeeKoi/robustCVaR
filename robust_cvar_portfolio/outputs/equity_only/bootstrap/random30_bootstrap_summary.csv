@@ -1,0 +1,2 @@
+comparison,dataset,n_universes,win_rate_A,mean_delta_A_pp,median_delta_A_pp,prob_b_lt_a,interpretation
+Random30 pooled: C_stable vs A,random30,3,1.0,0.21795354808475997,0.21133978420929,1.0,win_rate as pooled P(CVaR_C < CVaR_A) across universes

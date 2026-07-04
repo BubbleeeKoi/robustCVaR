@@ -1,0 +1,3 @@
+comparison,mean_cvar_diff_b_minus_a,ci_lo,ci_hi,prob_b_lt_a,interpretation,dataset
+SP30: C_stable vs A,-0.002850007553556795,-0.004832191699514491,-0.0011861994353777408,1.0,prob_b_lt_a = P(CVaR_B < CVaR_A),sp30
+SP30: C_stable vs B,-0.0015734264521997143,-0.0044160191588071196,0.00017673752820084222,0.94,prob_b_lt_a = P(CVaR_B < CVaR_A),sp30

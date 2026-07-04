@@ -1,0 +1,2 @@
+n_universes,n_assets,seeds,win_rate_A,win_rate_B,mean_delta_A,median_delta_A,mean_delta_B,median_delta_B,worst_quartile_delta_A,elapsed_sec
+3,30,"42,123,456",1.0,1.0,0.0021795354808476497,0.0021133978420929435,0.0024022645387460095,0.0017580443296557266,0.0015960406469002503,4225.229163885117

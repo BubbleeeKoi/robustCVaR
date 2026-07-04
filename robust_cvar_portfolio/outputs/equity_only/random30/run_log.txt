@@ -1,0 +1,30 @@
+=== V6 Random30 (30 universes × 30 stocks, seed=42) ===
+  skip universe 0 (checkpoint)
+  universe 1/29: ['ACN', 'AMGN', 'AMZN', 'AXP', 'CI']... (30 stocks)
+=== V6 Random30 (3 universes × 30 stocks, seeds=[42, 123, 456]) ===
+  skip universe 0 (checkpoint)
+  universe 1/2: ['ABT', 'ADBE', 'ADSK', 'AIG', 'CB']... (30 stocks)
+=== V6 Random30 (3 universes × 30 stocks, seeds=[42, 123, 456]) ===
+  skip universe 0 (checkpoint)
+  universe 1/2: ['ABT', 'ADBE', 'ADSK', 'AIG', 'CB']... (30 stocks)
+  universe 2/29: ['AAPL', 'ABT', 'ADSK', 'BA', 'BAC']... (30 stocks)
+  universe 2/2: ['ABT', 'ADBE', 'AMZN', 'AON', 'AXP']... (30 stocks)
+  universe 2/2: ['ABT', 'ADBE', 'AMZN', 'AON', 'AXP']... (30 stocks)
+
+=== Random30 Summary ===
+  WinRate vs A: 100.0%
+  WinRate vs B: 100.0%
+  mean Δ_A: 0.22 pp
+  median Δ_A: 0.21 pp
+Output: D:\CHEN科研-量化投资\2. MVO CVaR\rubost RL with CVaR\coding\Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk\robust_cvar_portfolio\outputs\equity_only\random30
+Done in 70.8 min
+
+=== Random30 Summary ===
+  WinRate vs A: 100.0%
+  WinRate vs B: 100.0%
+  mean Δ_A: 0.22 pp
+  median Δ_A: 0.21 pp
+Output: D:\CHEN科研-量化投资\2. MVO CVaR\rubost RL with CVaR\coding\Robust Risk-Sensitive Reinforcement Learning with Conditional Value-at-Risk\robust_cvar_portfolio\outputs\equity_only\random30
+Done in 70.4 min
+  universe 3/29: ['AAPL', 'ADSK', 'AIG', 'AMGN', 'BAC']... (30 stocks)
+  universe 4/29: ['AAPL', 'ADP', 'AIG', 'AMZN', 'AON']... (30 stocks)

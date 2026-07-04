@@ -650,4 +650,87 @@ outputs/v5/
 
 ---
 
-*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*
+## 14. V6：Equity-Only 个股主线（2026-07-03）
+
+> 计划文件：`V6equity_only_next_steps_plan.html`
+
+### 14.1 论文定位调整
+
+- **主文**：SP30（主结果）+ Random30（稳健性）+ SP100（高维压力测试 + 失败诊断）
+- **不再主文**：ETF10 / ETF20（附录或 future work）
+- 目标：证明个股组合中**何时有效、高维为何失效**，而非全市场最优
+
+### 14.2 实现脚本
+
+| 脚本 | 任务 |
+|------|------|
+| `run_equity_only_summary.py` | 整理 V5 SP30/SP100 → `outputs/equity_only/`，生成 paper_tables |
+| `run_random30_universes.py` | SP100 池随机 30 股 × K=30，4 模型 + val 选参 |
+| `run_sp100_highdim_diagnostics.py` | 横截面结构 + C vs A 劣化相关 |
+| `run_equity_bootstrap.py` | Block bootstrap 显著性 |
+| `equity_common.py` + `configs/v6_equity_common.yaml` | 共享工具与缩小网格 |
+
+### 14.3 已完成结果（Task 1/2/4/5）
+
+**SP30 主结果（Table 1）**
+
+| 模型 | CVaR | Sharpe | 年化收益 |
+|------|------|--------|----------|
+| A_ceil | 2.72% | 0.11 | 1.94% |
+| B_fixed | 2.60% | **0.31** | **9.61%** |
+| C_stable | **2.44%** | 0.23 | 3.81% |
+
+- CVaR：C_stable < B < A ✓（强成功标准）
+- Sharpe：C_stable (0.23) > A (0.11)，但 < B (0.31) → 论文写「尾部风险优化，非 Sharpe 最大化」
+
+**SP100 高维（Table 3）**
+
+| 模型 | CVaR | Sharpe |
+|------|------|--------|
+| A_ceil | **2.47%** | **0.44** |
+| C_default | 2.92% | 0.11 |
+| C_cap | 2.50% | 0.04 |
+| C_stable | 2.55% | -0.03 |
+
+**SP100 失败诊断（Task 4）**
+
+- `Corr(gap_C_default, avg_correlation) = +0.78`：C 劣化与高市场相关性同步
+- `Corr(gap, HHI) = +0.46`：权重越集中，C 相对 A 越差
+- `Corr(gap, effective_dimension) = -0.36`：有效维度越低，C 越差
+
+**Bootstrap（Task 5）**
+
+| 对比 | P(后者 CVaR 更优) |
+|------|-------------------|
+| SP30 C_stable vs A | **100%** |
+| SP30 C_stable vs B | **94%** |
+| SP100 C_stable vs C_default | **98%**（稳定化有效） |
+| SP100 C_stable vs A | 24.6%（未超越 A） |
+
+### 14.4 Random30（Task 3，已完成）
+
+- **3 组**，固定种子 **42 / 123 / 456**（各 30 股，从 SP100 池抽样）
+- **WinRate vs A = 100%**，**WinRate vs B = 100%**
+- mean Δ_A = **+0.22 pp**，median Δ_A = **+0.21 pp**，worst quartile Δ_A = **+0.16 pp**
+- 耗时 ~71 min；输出 `outputs/equity_only/random30/random30_summary.csv`
+- HTML §13.2 与 bootstrap Table 2 已自动更新
+
+### 14.5 输出目录
+
+```
+outputs/equity_only/
+  sp30/ sp100/ sp100_diagnostics/ bootstrap/ random30/
+  paper_tables/table1–table5
+```
+
+### 14.6 论文写法（V6 定稿）
+
+$$
+\boxed{
+\text{状态依赖鲁棒 CVaR 在中等规模个股池中有效；在高维个股池中需要稳定性控制，但仍可能难以超越强 CVaR baseline。}
+}
+$$
+
+---
+
+*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；V6 进行中：2026-07-03；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*
