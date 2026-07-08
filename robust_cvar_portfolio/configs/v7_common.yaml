@@ -1,0 +1,28 @@
+# V7: structure diagnostics + corr-stratified Random30 + effdim RCVaR
+validation:
+  start: "2018-01-01"
+  end: "2019-12-31"
+
+test:
+  start: "2020-01-01"
+  end: "2024-12-31"
+
+kappa_max_grid: [0.75, 1.0, 1.25]
+weight_cap_grid: [0.10, 0.15, null]
+rho_grid: [0.7, null]
+
+selection_objective:
+  lambda_turnover: 0.001
+  lambda_hhi: 0.01
+
+corr_stratified:
+  n_candidates: 300
+  n_assets: 30
+  n_per_group: 3
+  source: sp100
+  base_seed: 42
+
+effdim:
+  d0: 30
+
+structure_window: 60

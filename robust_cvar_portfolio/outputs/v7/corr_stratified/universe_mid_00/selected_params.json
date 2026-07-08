@@ -1,0 +1,5 @@
+{
+  "kappa_max": 1.25,
+  "weight_cap": 0.1,
+  "rho": 0.7
+}

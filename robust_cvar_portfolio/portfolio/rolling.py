@@ -5,15 +5,46 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from dataclasses import replace
+
 from robust_cvar_portfolio.portfolio.optimizer import optimize_portfolio
 from robust_cvar_portfolio.risk.kappa import KappaParams, kappa_manual
 from robust_cvar_portfolio.risk.risk_engine import RiskEngine
 from robust_cvar_portfolio.src.risk_metrics import cvar_alpha, turnover
 
 
+def effective_dimension_from_hist(hist: pd.DataFrame) -> float:
+    block = hist.values
+    if block.shape[0] < 5:
+        return float(block.shape[1])
+    cov = np.cov(block.T)
+    eig = np.maximum(np.linalg.eigvalsh(cov), 0.0)
+    denom = float(np.sum(eig**2))
+    if denom < 1e-12:
+        return float(block.shape[1])
+    return float(np.sum(eig) ** 2 / denom)
+
+
+def effdim_scale_factor(hist: pd.DataFrame, d0: float) -> float:
+    d_eff = effective_dimension_from_hist(hist)
+    return float(min(1.0, d_eff / d0))
+
+
 def monthly_rebalance_dates(index: pd.DatetimeIndex) -> list[pd.Timestamp]:
     groups = index.to_series().groupby([index.year, index.month])
     return [idx.max() for _, idx in groups]
+
+
+def _scaled_manual_engine(
+    engine: RiskEngine,
+    hist: pd.DataFrame,
+    effdim_d0: float | None,
+) -> RiskEngine:
+    if effdim_d0 is None or engine.kappa_mode != "manual":
+        return engine
+    a_t = effdim_scale_factor(hist, effdim_d0)
+    scaled = replace(engine.params, kappa_max=engine.params.kappa_max * a_t)
+    return RiskEngine(alpha=engine.alpha, kappa_mode="manual", params=scaled)
 
 
 def _engine_for_rebalance(
@@ -22,11 +53,14 @@ def _engine_for_rebalance(
     loc: int,
     kappa_rho: float | None,
     kappa_bar_prev: float,
+    hist: pd.DataFrame | None = None,
+    effdim_d0: float | None = None,
 ) -> tuple[RiskEngine, float]:
-    if kappa_rho is None or engine.kappa_mode != "manual":
-        return engine, kappa_bar_prev
+    base = _scaled_manual_engine(engine, hist, effdim_d0) if hist is not None else engine
+    if kappa_rho is None or base.kappa_mode != "manual":
+        return base, kappa_bar_prev
     state_row = features.iloc[loc]
-    kappa_raw = kappa_manual(state_row, engine.params)
+    kappa_raw = kappa_manual(state_row, base.params)
     kappa_bar = kappa_rho * kappa_bar_prev + (1.0 - kappa_rho) * kappa_raw
     smooth_engine = RiskEngine(
         alpha=engine.alpha,
@@ -50,6 +84,7 @@ def run_rolling(
     kappa_rho: float | None = None,
     hhi_penalty: float = 0.0,
     record_weights: bool = False,
+    effdim_d0: float | None = None,
 ) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
     rebalance_dates = set(monthly_rebalance_dates(returns.index))
     idx_map = {d: i for i, d in enumerate(returns.index)}
@@ -72,7 +107,8 @@ def run_rolling(
             feat = features.iloc[loc - estimation_window : loc]
             old_w = w_prev.copy()
             opt_engine, kappa_bar_prev = _engine_for_rebalance(
-                engine, features, loc, kappa_rho, kappa_bar_prev
+                engine, features, loc, kappa_rho, kappa_bar_prev,
+                hist=hist, effdim_d0=effdim_d0,
             )
             current_w, _, kappa_t = optimize_portfolio(
                 hist,

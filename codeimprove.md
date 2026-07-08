@@ -733,4 +733,111 @@ $$
 
 ---
 
-*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；V6 进行中：2026-07-03；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*
+## 15. V7：结构诊断、相关性分层 Random30 与有效维度缩放 RCVaR（2026-07-06）
+
+> 计划与结果：`V7_structure_corr_stratified_plan.html`（§9 论文写法 + §11 实验结果）
+
+### 15.1 目标
+
+V6 已证明 SP30 / Random30 有效、SP100 退化。V7 **不改叙事先补结构证据**，再测最小改动高维修正：
+
+$$
+V7 = \text{结构诊断} + \text{相关性分层 Random30} + \text{过拟合诊断} + \text{有效维度缩放 RCVaR}
+$$
+
+### 15.2 实现脚本
+
+| 脚本 | 模块 | 说明 |
+|------|------|------|
+| `run_v7_structure_summary.py` | V7-A | SP30 / Random30 / SP100 结构总表 |
+| `run_v7_generate_corr_stratified_universes.py` | V7-B | 候选 300 → Low/Mid/High 各 3 |
+| `run_v7_corr_stratified_backtest.py` | V7-B | 9 universe × 4 模型回测 |
+| `run_v7_tail_overfit_diagnostics.py` | V7-C | SP100 tail overlap + OOS gap |
+| `run_v7_effdim_rcvar.py` | V7-D | κ 有效维度缩放（`effdim_d0=30`） |
+| `v7_common.py` + `configs/v7_common.yaml` | 共享 | 路径、结构指标、V7 模型 |
+| `update_v7_html_results.py` | 文档 | 自动 patch `V7_structure_corr_stratified_plan.html` §9/§10/§11 |
+
+**代码改动**：`portfolio/rolling.py` 新增 `effdim_d0` 参数，实现
+$a_t=\min(1,\ d_{\mathrm{eff},t}/d_0)$ 缩放 $\kappa_{\max}$。
+
+### 15.3 复现命令
+
+```bash
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_structure_summary.py
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_generate_corr_stratified_universes.py --n-candidates 300 --n-per-group 3
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_corr_stratified_backtest.py --n-per-group 3
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_tail_overfit_diagnostics.py
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_effdim_rcvar.py --d0 30
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/update_v7_html_results.py
+```
+
+### 15.4 输出目录
+
+```
+outputs/v7/
+  structure/          # V7-A
+  corr_stratified/    # V7-B
+  overfit/            # V7-C
+  effdim_rcvar/       # V7-D
+  paper_tables/       # table_v7_*.csv
+```
+
+### 15.5 V7-A 结构诊断（已完成）
+
+| Universe | N | Val avg corr | Val d_eff | CVaR A | CVaR C_stable | Gap C−A |
+|----------|---|--------------|-----------|--------|---------------|---------|
+| SP30 | 29 | 0.364 | 5.3 | 2.72% | **2.44%** | **−0.28 pp** |
+| SP100 | 100 | 0.335 | 7.3 | **2.47%** | 2.55% | +0.08 pp |
+| Random30 (n=3) | 30 | 0.306 | — | 2.85% | **2.63%** | **−0.22 pp** |
+
+**解读**：Random30 与 SP30 的 validation 相关性低于 SP100 候选池 High 组；C_stable 劣于 A 的 gap 仅出现在 SP100。名义维度 N=100 但有效维度 d_eff≈7，说明「高维失败」需结合相关性与有效维度理解。
+
+### 15.6 V7-B 相关性分层（已完成，9/9 universe）
+
+| 组别 | Val corr | WinRate vs A | Mean Δ_A |
+|------|----------|--------------|----------|
+| Low-Corr | 0.280 | 67% | +0.02 pp |
+| Mid-Corr | 0.334 | 67% | +0.04 pp |
+| **High-Corr** | **0.392** | **100%** | **+0.17 pp** |
+
+- 耗时 ~155 min（续跑 High 三组）；输出 `outputs/v7/corr_stratified/group_summary.csv`
+- **意外发现**：High-Corr 30 股池改善最大（与 SP100 N=100 退化并不矛盾——高相关 + 低有效维度同时存在时才恶化）
+
+### 15.7 V7-C 过拟合诊断（已完成）
+
+| 模型 | Tail Jaccard | OOS Gap | Mean HHI |
+|------|--------------|---------|----------|
+| A_ceil | 0.029 | −0.46 pp | 0.118 |
+| C_stable | **0.023** | **−0.23 pp** | 0.071 |
+
+→ C_stable tail 重叠更低、OOS gap 更小，支持尾部样本不稳定机制。
+
+### 15.8 V7-D effdim RCVaR（已完成，~571 min）
+
+| Dataset | A | C_stable | V7_effdim | V7_effdim_cap |
+|---------|---|----------|-----------|---------------|
+| SP30 | 2.76% | 2.61% | 2.91% | **2.57%** |
+| SP100 | **2.47%** | 2.51% | 2.86% | 2.52% |
+
+**成功标准检验：**
+- SP30：V7_effdim_cap − C_stable = **−0.04 pp** ≤ +0.05 pp ✓（且略优于 C_stable）
+- SP100 最低标准：V7_effdim_cap (2.52%) < C_default (2.92%) ✓
+- SP100 中等标准：V7_effdim_cap ≈ C_stable（2.52% vs 2.51%），基本持平
+- SP100 强标准：未超越 A（2.47%）✗
+
+**结论：** effdim 缩放 + cap 可稳定 SP30、修复 SP100 相对 C_default 的退化，但尚不足以超越 Historical CVaR baseline。
+
+### 15.9 V7 论文叙事定稿
+
+$$
+\boxed{
+\text{状态依赖 RCVaR 在 30 股量级个股池有效；SP100 失败主因是名义维度与有效分散度，而非平均相关性更高。}
+}
+$$
+
+- SP100 val corr（0.335）< SP30（0.364）；High-Corr 30 股子集 WinRate=100%
+- SP100 边界案例：需 cap + effdim 缩放可修复 C_default，但 A 仍为强 baseline
+
+---
+
+*V1–V6 完成；**V7 完成：2026-07-07**；环境：`conda activate portfolio` 或 `envs/portfolio/python.exe`*

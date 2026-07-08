@@ -112,6 +112,7 @@ def run_val_backtest(
     config: dict,
     weight_cap: float | None = None,
     kappa_rho: float | None = None,
+    effdim_d0: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     val_start, val_end = config["splits"]["val"]
     cost = config.get("cost_rate", 0.001)
@@ -129,6 +130,7 @@ def run_val_backtest(
         weight_cap=weight_cap,
         kappa_rho=kappa_rho,
         record_weights=True,
+        effdim_d0=effdim_d0,
     )
     tickers = list(returns.columns)
     m = summarize_backtest(frame["net_return"], frame["loss"], frame["turnover"], config.get("alpha", 0.05))
@@ -144,6 +146,7 @@ def run_test_backtest(
     config: dict,
     weight_cap: float | None = None,
     kappa_rho: float | None = None,
+    effdim_d0: float | None = None,
 ) -> pd.DataFrame:
     test_start, test_end = config["splits"]["test"]
     cost = config.get("cost_rate", 0.001)
@@ -160,6 +163,7 @@ def run_test_backtest(
         maxiter,
         weight_cap=weight_cap,
         kappa_rho=kappa_rho,
+        effdim_d0=effdim_d0,
     )
     return frame
 

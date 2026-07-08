@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>V7 补充计划：结构诊断、相关性分层 Random30 与有效维度缩放 RCVaR</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+body{font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;max-width:1180px;margin:40px auto;padding:0 24px;line-height:1.75;color:#222;}
+h1{border-bottom:3px solid #7f1d1d;padding-bottom:12px;}
+h2{margin-top:38px;border-left:6px solid #7f1d1d;padding-left:12px;}
+h3{color:#7f1d1d;margin-top:26px;}
+table{border-collapse:collapse;width:100%;margin:16px 0;}
+th,td{border:1px solid #ccc;padding:8px 10px;vertical-align:top;}
+th{background:#f8eeee;}
+pre,code{background:#f5f5f5;border-radius:4px;}
+code{padding:2px 4px;}
+pre{padding:14px;overflow-x:auto;}
+.box{background:#f7f7f7;border-left:5px solid #555;padding:14px 18px;margin:18px 0;}
+.warn{background:#fff7e6;border-left:5px solid #f59e0b;padding:14px 18px;margin:18px 0;}
+.good{background:#ecfdf5;border-left:5px solid #10b981;padding:14px 18px;margin:18px 0;}
+.bad{background:#fef2f2;border-left:5px solid #dc2626;padding:14px 18px;margin:18px 0;}
+.small{color:#666;font-size:0.94em;}
+</style>
+</head>
+
+<body>
+
+<h1>V7 补充计划：结构诊断、相关性分层 Random30 与有效维度缩放 RCVaR</h1>
+
+<div class="box">
+<b>核心决策：</b> V7 不直接上复杂新模型，也不加入收益项。V7 先补结构证据，再做相关性分层实验，最后才测试最小改动版高维修正模型。
+<br><br>
+$$
+\boxed{
+V7=
+\text{结构诊断}
++
+\text{相关性分层 Random30}
++
+\text{过拟合诊断}
++
+\text{有效维度缩放 RCVaR}
+}
+$$
+<br>
+本计划中，相关性分层实验采用 <b>每组 3 个 universe</b>：
+<br><br>
+$$
+K_{low}=3,\qquad K_{mid}=3,\qquad K_{high}=3.
+$$
+<br>
+也就是从候选 30-stock universe 中选：
+<br>
+最低 3 个 Low-Corr，中间 3 个 Mid-Corr，最高 3 个 High-Corr。
+</div>
+
+<h2>0. V7 的目的</h2>
+
+<p>V6 已经表明：中等维度个股池 SP30 和 3 组 Random30 中，$C_{\text{stable}}$ 可以改善尾部风险；但在 SP100 中，$C_{\text{stable}}$ 虽然显著修复 $C_{\text{default}}$，仍难以超过强基线 $A_{\text{ceil}}$。</p>
+
+<p>现在不能只说：</p>
+
+<div class="bad">
+SP100 失败是因为维度高。
+</div>
+
+<p>因为高维只是表面事实。必须进一步回答：</p>
+
+$$
+\boxed{
+SP100 的失败是否来自高相关性、共同因子主导、有效维度下降、权重集中或尾部样本过拟合？
+}
+$$
+
+<p>因此 V7 的任务是把“为什么 SP30 / Random30 有效、为什么 SP100 退化”变成可验证的结构机制。</p>
+
+<h2>1. V7 总流程</h2>
+
+<table>
+<tr><th>模块</th><th>名称</th><th>目的</th><th>是否改模型</th></tr>
+<tr><td>V7-A</td><td>结构诊断总表</td><td>比较 SP30、Random30、SP100 的 avg corr、PC1Share、effective dimension、HHI、turnover。</td><td>否</td></tr>
+<tr><td>V7-B</td><td>相关性分层 Random30</td><td>检验低/中/高相关性资产池中 $C_{\text{stable}}$ 的表现是否不同。</td><td>否</td></tr>
+<tr><td>V7-C</td><td>Tail-sample overfitting 诊断</td><td>检验 SP100 中是否存在尾部样本追逐、样本内-样本外 gap 放大。</td><td>否</td></tr>
+<tr><td>V7-D</td><td>有效维度缩放 RCVaR</td><td>如果结构证据成立，再测试最小改动的高维适应模型。</td><td>是</td></tr>
+</table>
+
+<div class="warn">
+<b>重要：</b> V7-D 必须放在 V7-A/B/C 之后。不要先改模型再找解释，否则容易被认为是为了结果而调模型。
+</div>
+
+<h2>2. V7-A：结构诊断总表</h2>
+
+<h3>2.1 目的</h3>
+
+<p>V7-A 先回答：</p>
+
+$$
+\boxed{
+SP30,\ Random30,\ SP100
+\text{ 的相关性结构和实际有效维度是否不同？}
+}
+$$
+
+<p>这一步不做任何新模型，只计算结构指标。</p>
+
+<h3>2.2 需要计算的结构指标</h3>
+
+<table>
+<tr><th>指标</th><th>定义</th><th>解释</th></tr>
+<tr>
+<td>Average Correlation</td>
+<td>$$\overline{Corr}_t=\frac{2}{N(N-1)}\sum_{i<j}\rho_{ij,t}$$</td>
+<td>资产之间平均同涨同跌程度。</td>
+</tr>
+<tr>
+<td>PC1 Share</td>
+<td>$$PC1Share_t=\frac{\lambda_{1,t}}{\sum_{j=1}^{N}\lambda_{j,t}}$$</td>
+<td>第一共同因子解释方差占比。越高说明共同市场因子越强。</td>
+</tr>
+<tr>
+<td>Effective Dimension</td>
+<td>$$d_{\mathrm{eff},t}=\frac{\left(\sum_j\lambda_{j,t}\right)^2}{\sum_j\lambda_{j,t}^2}$$</td>
+<td>真实可分散维度。名义 $N=100$ 不代表实际有效维度也是 100。</td>
+</tr>
+<tr>
+<td>Weight HHI</td>
+<td>$$HHI(w_t)=\sum_i w_{i,t}^2$$</td>
+<td>组合权重集中度。</td>
+</tr>
+<tr>
+<td>Effective Holdings</td>
+<td>$$N_{\mathrm{eff}}(w_t)=\frac{1}{HHI(w_t)}$$</td>
+<td>组合有效持仓数。</td>
+</tr>
+<tr>
+<td>Turnover</td>
+<td>$$Turnover_t=\|w_t-w_{t-1}\|_1$$</td>
+<td>组合路径稳定性。</td>
+</tr>
+<tr>
+<td>C-A CVaR Gap</td>
+<td>$$Gap=CVar(C_{\text{stable}})-CVar(A_{\text{ceil}})$$</td>
+<td>若 Gap&lt;0，说明 C 优于 A；若 Gap&gt;0，说明 C 劣于 A。</td>
+</tr>
+</table>
+
+<h3>2.3 时间窗口建议</h3>
+
+<table>
+<tr><th>阶段</th><th>用途</th><th>是否用于选模型</th></tr>
+<tr><td>Validation 2018--2019</td><td>主结构描述和分层选择</td><td>是</td></tr>
+<tr><td>Test 2020--2024</td><td>样本外解释和稳健性检查</td><td>否，只做解释</td></tr>
+</table>
+
+<div class="warn">
+主文中用于构造 Low/Mid/High 分层的相关性必须使用 validation 期，不能用 test 期排序。否则容易产生 test leakage。
+</div>
+
+<h3>2.4 输出表</h3>
+
+<pre><code>robust_cvar_portfolio/outputs/v7/structure/universe_structure_summary.csv</code></pre>
+
+<h2>3. V7-B：相关性分层 Random30 实验</h2>
+
+<h3>3.1 目的</h3>
+
+<p>原 Random30 只验证 SP30 不是单一样本偶然，但不能解释为什么有效。V7-B 的目标是验证：</p>
+
+$$
+\boxed{
+C_{\text{stable}}
+\text{ 的有效性是否依赖资产池相关性结构。}
+}
+$$
+
+<h3>3.2 采样策略</h3>
+
+<p>从 SP100 股票池中先随机生成候选 30-stock universe：</p>
+
+$$
+K_{\text{candidate}}=300
+\quad\text{或}\quad
+500.
+$$
+
+<p>每个候选 universe：</p>
+
+$$
+U_k\subset SP100,\qquad |U_k|=30.
+$$
+
+<p>对每个候选 universe 计算 validation 期平均相关性：</p>
+
+$$
+\overline{Corr}_{k}^{val}
+=
+\frac{1}{T_{val}}
+\sum_{t\in Val}
+\overline{Corr}_{k,t}.
+$$
+
+<p>然后按 $\overline{Corr}_{k}^{val}$ 从小到大排序。</p>
+
+<h3>3.3 选择 Low / Mid / High，每组 3 个</h3>
+
+<p>本轮按要求，每组只取 3 个 universe，不再取 10 个：</p>
+
+<table>
+<tr><th>组别</th><th>选择方法</th><th>数量</th><th>目的</th></tr>
+<tr><td>Low-Corr</td><td>排序后最低 3 个候选 universe</td><td>3</td><td>测试低相关性下 $\kappa(s)$ 是否边际作用较弱。</td></tr>
+<tr><td>Mid-Corr</td><td>排序后最接近中位数的 3 个候选 universe</td><td>3</td><td>测试中等相关性是否是 $C_{\text{stable}}$ 的优势区间。</td></tr>
+<tr><td>High-Corr</td><td>排序后最高 3 个候选 universe</td><td>3</td><td>测试高相关性是否导致状态依赖 RCVaR 退化。</td></tr>
+</table>
+
+<div class="good">
+最终 V7-B 总共回测：
+<br><br>
+$$
+3+3+3=9
+$$
+<br>
+个 30-stock universe。计算量比原来 30 个 universe 小很多，但解释力更强。
+</div>
+
+<h3>3.4 伪代码</h3>
+
+<pre><code>candidate_universes = []
+
+for k in range(K_candidate):
+    U = random_sample(SP100, n_assets=30, seed=base_seed+k)
+    avg_corr_val = compute_validation_avg_corr(U)
+    pc1_val = compute_validation_pc1_share(U)
+    effdim_val = compute_validation_effective_dim(U)
+    candidate_universes.append({
+        "universe_id": k,
+        "tickers": U,
+        "avg_corr_val": avg_corr_val,
+        "pc1_share_val": pc1_val,
+        "effdim_val": effdim_val
+    })
+
+candidates = sort(candidate_universes, key="avg_corr_val")
+
+low_group = candidates[:3]
+
+mid_index = len(candidates) // 2
+mid_group = candidates[mid_index-1:mid_index+2]
+
+high_group = candidates[-3:]
+
+selected = low_group + mid_group + high_group
+save(selected, "selected_low_mid_high_universes.csv")</code></pre>
+
+<h3>3.5 每个 universe 跑哪些模型？</h3>
+
+<table>
+<tr><th>模型</th><th>作用</th></tr>
+<tr><td>A_ceil_CVaR</td><td>强普通 CVaR baseline。</td></tr>
+<tr><td>B_fixed_kappa</td><td>固定鲁棒 baseline。</td></tr>
+<tr><td>C_default</td><td>未稳定化状态依赖 RCVaR。</td></tr>
+<tr><td>C_stable</td><td>V6 主方法：状态依赖 RCVaR + cap / smoothing。</td></tr>
+</table>
+
+<h3>3.6 参数选择</h3>
+
+<p>每个 universe 的 $C_{\text{stable}}$ 参数仍然只能用 validation 期选择：</p>
+
+$$
+J_{\text{val}}
+=
+CVaR^{val}_{5\%}
++
+0.001\,\overline{Turn}^{val}
++
+0.01\,\overline{HHI}^{val}.
+$$
+
+<table>
+<tr><th>参数</th><th>候选集</th></tr>
+<tr><td>$\kappa_{\max}$</td><td>$\{0.75,1.0,1.25\}$</td></tr>
+<tr><td>cap $u$</td><td>$\{0.10,0.15,\text{None}\}$</td></tr>
+<tr><td>$\rho$</td><td>$\{0.7,\text{None}\}$</td></tr>
+</table>
+
+<h3>3.7 输出文件</h3>
+
+<pre><code>robust_cvar_portfolio/outputs/v7/corr_stratified/
+    candidate_300_universes.csv
+    selected_low_mid_high_universes.csv
+    results_all.csv
+    group_summary.csv
+    selected_params.csv
+    figures/
+        fig_corr_vs_cvar_improvement.png
+        fig_group_cvar_comparison.png
+        fig_sp30_position_in_corr_space.png</code></pre>
+
+<h3>3.8 核心统计量</h3>
+
+<p>定义：</p>
+
+$$
+\Delta_A^{(k)}
+=
+CVaR(A_k)-CVaR(C_{\text{stable},k}).
+$$
+
+<p>若 $\Delta_A^{(k)}>0$，说明 C_stable 优于 A。</p>
+
+<p>每组汇总：</p>
+
+$$
+WinRate_A^{group}
+=
+\frac{1}{K_g}
+\sum_{k\in group}
+\mathbf 1
+\{
+\Delta_A^{(k)}>0
+\}.
+$$
+
+<p>因为本轮每组只有 3 个 universe：</p>
+
+$$
+K_g=3.
+$$
+
+<p>所以 WinRate 只能取：</p>
+
+$$
+0,\quad \frac{1}{3},\quad \frac{2}{3},\quad 1.
+$$
+
+<div class="warn">
+每组只有 3 个 universe，适合做快速机制验证，不适合声称严格统计显著。若结果很关键，后续可以再扩展到每组 10 个。
+</div>
+
+<h2>4. V7-C：Tail-sample overfitting 诊断</h2>
+
+<h3>4.1 目的</h3>
+
+<p>SP100 中 $C_{\text{stable}}$ 没有超过 $A_{\text{ceil}}$。V7-C 不改模型，而是验证这种退化是否与尾部样本追逐、样本内-样本外 gap 有关。</p>
+
+<h3>4.2 Tail set overlap</h3>
+
+<p>每个调仓日 $t$，取训练窗口中最坏 5% 日期集合：</p>
+
+$$
+\mathcal T_t^m
+=
+\{\text{worst }5\%\text{ dates under model }m\}.
+$$
+
+<p>计算相邻调仓日尾部集合重叠率：</p>
+
+$$
+J_t^m
+=
+\frac{
+|\mathcal T_t^m\cap\mathcal T_{t-1}^m|
+}{
+|\mathcal T_t^m\cup\mathcal T_{t-1}^m|
+}.
+$$
+
+<h3>4.3 In-sample / out-of-sample gap</h3>
+
+<p>每个调仓日记录样本内目标值：</p>
+
+$$
+RCVaR^{train}_t(w_t).
+$$
+
+<p>再计算下一持有期实际尾部损失：</p>
+
+$$
+CVaR^{holdout}_t(w_t).
+$$
+
+<p>定义：</p>
+
+$$
+OOSGap_t
+=
+CVaR^{holdout}_t(w_t)
+-
+RCVaR^{train}_t(w_t).
+$$
+
+<h3>4.4 输出文件</h3>
+
+<pre><code>robust_cvar_portfolio/outputs/v7/overfit/
+    tail_set_overlap.csv
+    oos_gap_by_rebalance.csv
+    oos_gap_summary.csv
+    q_weight_concentration.csv
+    figures/
+        fig_tail_overlap.png
+        fig_oos_gap_boxplot.png
+        fig_q_hhi.png</code></pre>
+
+<h2>5. V7-D：有效维度缩放 RCVaR</h2>
+
+<h3>5.1 何时进入 V7-D？</h3>
+
+<p>只有当 V7-A/B/C 支持以下机制时，才进入 V7-D：</p>
+
+<ol>
+<li>SP100 或 High-Corr 组表现出更高 avg corr / PC1Share 或更低 effective dimension；</li>
+<li>$C_{\text{stable}}$ 的劣化与结构变量相关；</li>
+<li>SP100 存在权重集中、换手升高或 OOS gap 放大。</li>
+</ol>
+
+<h3>5.2 不做简单叠加</h3>
+
+<p>不要写成：</p>
+
+$$
+\kappa_t
+=
+1+\kappa_{\max}
+\sigma(\beta^\top s_t+\eta^\top g_t).
+$$
+
+<p>这个容易变成变量堆叠。V7-D 应该采用结构缩放：</p>
+
+$$
+\boxed{
+\kappa_t^{V7}
+=
+1+
+a_t\cdot
+\kappa_{\max}
+\sigma(\beta^\top s_t)
+}
+$$
+
+<p>其中 $a_t$ 是有效维度缩放因子。</p>
+
+<h3>5.3 推荐缩放因子</h3>
+
+<h4>版本一：比例缩放</h4>
+
+$$
+a_t=
+\frac{d_{\mathrm{eff},t}}{N_t}.
+$$
+
+<h4>版本二：阈值缩放，推荐</h4>
+
+$$
+a_t=
+\min\left\{
+1,
+\frac{d_{\mathrm{eff},t}}{d_0}
+\right\}.
+$$
+
+<p>其中 $d_0$ 可取 30，或者 validation 中位数。推荐先用：</p>
+
+$$
+d_0=30.
+$$
+
+<ul>
+<li>如果有效维度 $\ge 30$，则 $a_t=1$，保持原来的 $\kappa(s)$；</li>
+<li>如果有效维度 $<30$，说明实际可分散维度不足，收缩 $\kappa(s)$ 的强度；</li>
+<li>这样可以尽量保留 SP30，同时抑制 SP100 的过度鲁棒反馈。</li>
+</ul>
+
+<h3>5.4 V7-D 候选模型</h3>
+
+<table>
+<tr><th>模型</th><th>公式 / 说明</th><th>作用</th></tr>
+<tr><td>C_stable</td><td>V6 主方法</td><td>对照基准。</td></tr>
+<tr><td>V7_effdim</td><td>$$\kappa_t=1+a_t\kappa_{\max}\sigma(\beta^\top s_t)$$</td><td>有效维度缩放。</td></tr>
+<tr><td>V7_effdim_cap</td><td>V7_effdim + validation-selected cap</td><td>高维稳定版。</td></tr>
+</table>
+
+<h3>5.5 V7-D 测试范围</h3>
+
+<table>
+<tr><th>Universe</th><th>目的</th></tr>
+<tr><td>SP30</td><td>验证 V7 不破坏原成功结果。</td></tr>
+<tr><td>Low-Corr 30 × 3</td><td>看低相关组是否被过度收缩。</td></tr>
+<tr><td>Mid-Corr 30 × 3</td><td>验证优势区间是否保持。</td></tr>
+<tr><td>High-Corr 30 × 3</td><td>验证高相关组是否改善。</td></tr>
+<tr><td>SP100</td><td>验证高维退化是否被修复。</td></tr>
+</table>
+
+<h2>6. V7 成功标准</h2>
+
+<h3>6.1 SP30 成功标准</h3>
+
+<p>V7 不能为了救 SP100 而毁掉 SP30：</p>
+
+$$
+CVaR(V7,SP30)
+\le
+CVaR(C_{\text{stable}},SP30)+0.05\text{pp}.
+$$
+
+<h3>6.2 SP100 成功标准</h3>
+
+<table>
+<tr><th>标准</th><th>条件</th><th>解释</th></tr>
+<tr><td>最低标准</td><td>$$CVaR(V7)<CVaR(C_{\text{default}})$$</td><td>修复默认 C。</td></tr>
+<tr><td>中等标准</td><td>$$CVaR(V7)\le CVaR(C_{\text{stable}})$$</td><td>优于或不弱于 V6 稳定版。</td></tr>
+<tr><td>强标准</td><td>$$CVaR(V7)<CVaR(A_{\text{ceil}})$$</td><td>超过强 historical CVaR baseline。</td></tr>
+</table>
+
+<h3>6.3 相关性分层成功标准</h3>
+
+<table>
+<tr><th>组别</th><th>成功标准</th></tr>
+<tr><td>Low-Corr</td><td>V7 不明显劣于 C_stable；若改善小也可以接受。</td></tr>
+<tr><td>Mid-Corr</td><td>V7 应保持 C_stable 的优势。</td></tr>
+<tr><td>High-Corr</td><td>V7 应相对 C_default 或 C_stable 改善，证明结构缩放有用。</td></tr>
+</table>
+
+<h2>7. 推荐脚本与命令</h2>
+
+<h3>7.1 脚本列表</h3>
+
+<pre><code>robust_cvar_portfolio/experiments/run_v7_structure_summary.py
+robust_cvar_portfolio/experiments/run_v7_generate_corr_stratified_universes.py
+robust_cvar_portfolio/experiments/run_v7_corr_stratified_backtest.py
+robust_cvar_portfolio/experiments/run_v7_tail_overfit_diagnostics.py
+robust_cvar_portfolio/experiments/run_v7_effdim_rcvar.py</code></pre>
+
+<h3>7.2 推荐命令</h3>
+
+<pre><code># 1. 结构诊断总表
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_structure_summary.py
+
+# 2. 生成相关性分层 universe：候选 300 个，每组 3 个
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_generate_corr_stratified_universes.py --n-candidates 300 --n-assets 30 --n-per-group 3 --source sp100
+
+# 3. 回测 Low/Mid/High 各 3 个 universe
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_corr_stratified_backtest.py --n-per-group 3
+
+# 4. SP100 tail-sample overfitting 诊断
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_tail_overfit_diagnostics.py
+
+# 5. 有效维度缩放 RCVaR
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_effdim_rcvar.py --d0 30</code></pre>
+
+<h2>8. 输出目录结构</h2>
+
+<pre><code>robust_cvar_portfolio/outputs/v7/
+    structure/
+        universe_structure_summary.csv
+        fig_structure_comparison.png
+        fig_sp30_random30_sp100_corr_space.png
+
+    corr_stratified/
+        candidate_300_universes.csv
+        selected_low_mid_high_universes.csv
+        results_all.csv
+        group_summary.csv
+        selected_params.csv
+        figures/
+            fig_corr_vs_cvar_improvement.png
+            fig_group_cvar_comparison.png
+            fig_sp30_position_in_corr_space.png
+
+    overfit/
+        tail_set_overlap.csv
+        oos_gap_by_rebalance.csv
+        oos_gap_summary.csv
+        q_weight_concentration.csv
+        figures/
+            fig_tail_overlap.png
+            fig_oos_gap_boxplot.png
+            fig_q_hhi.png
+
+    effdim_rcvar/
+        sp30_results.csv
+        sp100_results.csv
+        corr_stratified_results.csv
+        summary.csv
+        selected_params.csv
+        figures/
+            fig_v7_vs_v6_cvar.png
+            fig_effdim_scaling_factor.png
+
+    paper_tables/
+        table_v7_structure_summary.csv
+        table_v7_corr_stratified.csv
+        table_v7_overfit_diagnostics.csv
+        table_v7_effdim_results.csv</code></pre>
+
+<h2>9. 论文写法建议（实验完成后定稿）</h2>
+
+<h3>9.1 结构适用条件（V7-A + V7-B）</h3>
+
+<div class="box">
+The equity-only evidence shows that the effectiveness of state-dependent RCVaR is not governed by average correlation alone. SP100 exhibits <em>lower</em> validation average correlation than SP30, yet $C_{\text{stable}}$ underperforms the historical CVaR baseline on SP100. Correlation-stratified 30-stock universes drawn from the SP100 pool further show that high-correlation subsets can yield the largest CVaR improvements. We therefore attribute SP100 degradation primarily to the joint effect of <b>nominal dimensionality</b> and <b>limited effective diversification</b>, rather than to high correlation per se.
+</div>
+
+<h3>9.2 相关性分层（V7-B 实际结果）</h3>
+
+<div class="warn">
+<b>原计划假设</b>（Mid-Corr 最优）<b>未被支持</b>。实际：High-Corr 30 股组 WinRate=100%，mean $\Delta_A=+0.17$ pp；Low/Mid 组均为 67%，改善更小。
+</div>
+
+<div class="box">
+Within 30-stock subsets of the SP100 universe, state-dependent RCVaR remains effective even in highly correlated pools. This contradicts a simple narrative that higher correlation alone causes failure. Instead, the full SP100 case appears to be a boundary regime where optimization complexity, weight concentration, and a strong historical-CVaR baseline interact.
+</div>
+
+<h3>9.3 有效维度缩放（V7-D 实际结果）</h3>
+
+<div class="box">
+Motivated by structural diagnostics, we introduce an effective-dimension-scaled ambiguity budget with validation-selected cap ($d_0=30$). On SP30, $V7_{\text{effdim+cap}}$ improves CVaR relative to $C_{\text{stable}}$ without violating the non-degradation criterion. On SP100, it repairs the default state-dependent model and matches $C_{\text{stable}}$, but still does not beat the historical CVaR baseline. Cap remains essential: scaling $\kappa$ alone without cap worsens performance.
+</div>
+
+<h3>9.4 定稿叙事（中文）</h3>
+
+<div class="good">
+$$
+\boxed{
+\text{状态依赖 RCVaR 在 30 股量级个股池有效；SP100 失败主因是名义维度与有效分散度，而非平均相关性更高。}
+}
+$$
+</div>
+
+<h2>10. 最终检查清单</h2>
+
+<table>
+<tr><th>任务</th><th>状态</th><th>结论摘要</th></tr>
+<tr><td>V7-A 结构诊断</td><td>✅</td><td>SP100 corr 不高于 SP30；d_eff≈7；C_stable 在 SP100 略劣 A</td></tr>
+<tr><td>V7-B 相关性分层</td><td>✅</td><td>High-Corr 30 股组改善最大；不支持「Mid 最优」假设</td></tr>
+<tr><td>V7-C 过拟合诊断</td><td>✅</td><td>tail overlap + OOS gap 支持尾部不稳定机制</td></tr>
+<tr><td>V7-D 有效维度缩放</td><td>✅</td><td>effdim+cap 修复 SP100 default；未超 A</td></tr>
+</table>
+
+<div class="good">
+<b>最终目标（已达成）：</b>
+<br><br>
+$$
+\boxed{
+\text{不是证明一个模型在所有市场都赢，而是建立状态依赖 RCVaR 的结构适用条件，并在此基础上提出最小、可解释的高维修正。}
+}
+$$
+</div>
+
+
+<h2>11. 实验结果与分析</h2>
+
+<h3>11.1 V7-A 结构诊断</h3>
+<div class="good"><b>已完成。</b> 输出：<code>outputs/v7/structure/universe_structure_summary.csv</code></div>
+<table>
+<tr><th>Universe</th><th>N</th><th>Val avg corr</th><th>Val d_eff</th><th>CVaR A</th><th>CVaR C_stable</th><th>Gap C−A</th></tr>
+<tr><td>SP30</td><td>29</td><td>0.364</td><td>5.3</td><td>2.72%</td><td>2.44%</td><td>-0.28 pp</td></tr><tr><td>SP100</td><td>100</td><td>0.335</td><td>7.3</td><td>2.47%</td><td>2.55%</td><td>0.08 pp</td></tr><tr><td>Random30 (n=3)</td><td>30</td><td>0.306</td><td>—</td><td>2.85%</td><td>2.63%</td><td>-0.22 pp</td></tr>
+</table>
+<p>图表：<code>outputs/v7/structure/figures/fig_structure_comparison.png</code></p>
+
+
+<h3>11.2 V7-B 相关性分层 Random30</h3>
+<div class="good"><b>已完成。</b> Low/Mid/High 各 3 个 universe（候选 300）。</div>
+<table>
+<tr><th>组别</th><th>n</th><th>Mean val corr</th><th>WinRate vs A</th><th>Mean Δ_A</th></tr>
+<tr><td>low</td><td>3</td><td>0.280</td><td>66.7%</td><td>0.02 pp</td></tr><tr><td>mid</td><td>3</td><td>0.334</td><td>66.7%</td><td>0.04 pp</td></tr><tr><td>high</td><td>3</td><td>0.392</td><td>100.0%</td><td>0.17 pp</td></tr>
+</table>
+<p>图表：<code>outputs/v7/corr_stratified/figures/fig_corr_vs_cvar_improvement.png</code></p>
+
+
+<h3>11.3 V7-C 过拟合诊断（SP100）</h3>
+<div class="good"><b>已完成。</b></div>
+<table>
+<tr><th>模型</th><th>Mean tail Jaccard</th><th>Mean OOS gap</th><th>Mean HHI</th></tr>
+<tr><td>A_ceil_CVaR</td><td>0.029</td><td>-0.461 pp</td><td>0.118</td></tr><tr><td>B_fixed_kappa</td><td>0.031</td><td>-0.996 pp</td><td>0.070</td></tr><tr><td>C_default</td><td>0.029</td><td>-0.871 pp</td><td>0.075</td></tr><tr><td>C_stable</td><td>0.023</td><td>-0.231 pp</td><td>0.071</td></tr>
+</table>
+<p>图表：<code>outputs/v7/overfit/figures/fig_oos_gap_boxplot.png</code></p>
+
+
+<h3>11.4 V7-D 有效维度缩放 RCVaR</h3>
+<div class="good"><b>已完成。</b> d₀=30，耗时 ~571 min。</div>
+<table>
+<tr><th>Dataset</th><th>Model</th><th>Test CVaR 5%</th></tr>
+<tr><td>SP30</td><td>A_ceil_CVaR</td><td>2.76%</td></tr><tr><td>SP30</td><td>C_stable</td><td>2.61%</td></tr><tr><td>SP30</td><td>V7_effdim</td><td>2.91%</td></tr><tr><td>SP30</td><td>V7_effdim_cap</td><td>2.57%</td></tr><tr><td>SP100</td><td>A_ceil_CVaR</td><td>2.47%</td></tr><tr><td>SP100</td><td>C_stable</td><td>2.51%</td></tr><tr><td>SP100</td><td>V7_effdim</td><td>2.86%</td></tr><tr><td>SP100</td><td>V7_effdim_cap</td><td>2.52%</td></tr>
+</table>
+<p>图表：<code>outputs/v7/effdim_rcvar/figures/fig_v7_vs_v6_cvar.png</code></p>
+
+
+<h3>11.5 结果解读（定稿摘要）</h3>
+<div class="box">
+<b>结构机制（V7-A）：</b> SP100 validation 平均相关性（0.335）<b>并不高于</b> SP30（0.364），但 SP100 名义维度 N=100、有效维度 d_eff≈7；C_stable 在 SP30/Random30 优于 A，在 SP100 略劣于 A（+0.08 pp）。<br><br>
+<b>相关性分层（V7-B）：</b> 从 SP100 池抽取 30 股子组合时，High-Corr 组 WinRate=100%、mean Δ_A=+0.17 pp——<b>高相关本身不导致失败</b>；失败更可能与 N=100 下的优化复杂度与强 baseline 相关。<br><br>
+<b>过拟合（V7-C）：</b> SP100 上 C_stable tail 重叠率最低（0.023）、OOS gap 小于 C_default；权重更集中（N_eff≈15）。<br><br>
+<b>有效维度缩放（V7-D）：</b> V7_effdim_cap 在 SP30 略优于 C_stable（−0.04 pp）；在 SP100 修复 C_default（2.92%→2.52%）并与 C_stable 持平，但仍未超越 A（2.47%）。纯 effdim 无 cap 在两市场均变差。
+</div>
+<table>
+<tr><th>Dataset</th><th>A</th><th>C_stable</th><th>V7_effdim</th><th>V7_effdim_cap</th></tr>
+<tr><td>SP30</td><td>2.76%</td><td>2.61%</td><td>2.91%</td><td><b>2.57%</b></td></tr>
+<tr><td>SP100</td><td><b>2.47%</b></td><td>2.51%</td><td>2.86%</td><td>2.52%</td></tr>
+</table>
+<div class="warn">
+<b>论文叙事修正：</b> 不宜写「SP100 因相关性高而失败」；应写「中等规模 30 股池有效；全样本 SP100 为名义维度与有效分散度联合作用的边界案例」。
+</div>
+<h3>11.6 成功标准对照</h3>
+<table>
+<tr><th>标准</th><th>条件</th><th>结果</th></tr>
+<tr><td>SP30 不恶化</td><td>CVaR(V7) ≤ CVaR(C_stable)+0.05 pp</td><td><b>✓</b> V7_effdim_cap 2.57% &lt; C_stable 2.61%</td></tr>
+<tr><td>SP100 最低</td><td>CVaR(V7) &lt; CVaR(C_default)</td><td><b>✓</b> 2.52% &lt; 2.92%</td></tr>
+<tr><td>SP100 中等</td><td>CVaR(V7) ≤ CVaR(C_stable)</td><td>≈ 持平（2.52% vs 2.51%）</td></tr>
+<tr><td>SP100 强标准</td><td>CVaR(V7) &lt; CVaR(A)</td><td><b>✗</b> 2.52% &gt; 2.47%</td></tr>
+</table>
+
+
+</body>
+
+</body>
+</html>
