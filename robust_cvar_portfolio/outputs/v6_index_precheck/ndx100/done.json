@@ -1,0 +1,18 @@
+{
+  "index": "ndx100",
+  "elapsed_sec": 31.86339521408081,
+  "A_cvar": 0.03461149729446233,
+  "C_stable_cvar": 0.03446348142920176,
+  "Index_cvar": 0.03765685067587809,
+  "delta_C_vs_A": 0.00014801586526056593,
+  "win_C_vs_A": true,
+  "win_C_vs_Index": true,
+  "kappa_max": 0.75,
+  "weight_cap": null,
+  "rho": null,
+  "avg_correlation": 0.3291473341240292,
+  "pc1_share": 0.38649281159627613,
+  "d_eff": 5.783903101357077,
+  "d_eff_over_N": 0.09639838502261795,
+  "universe_turnover_mean": 0.015673311063507826
+}

@@ -1,0 +1,23 @@
+# NDX100 (Nasdaq-100) — point-in-time via nasdaq100.csv
+dataset: ndx100
+index_key: ndx100
+benchmark_ticker: QQQ
+target_n: 100
+start_date: "2010-01-01"
+end_date: "2024-12-31"
+splits:
+  train: ["2010-01-01", "2017-12-31"]
+  val: ["2018-01-01", "2019-12-31"]
+  test: ["2020-01-01", "2024-12-31"]
+alpha: 0.05
+kappa_max: 1.0
+fixed_kappa: 2.0
+cost_rate: 0.001
+estimation_window: 252
+optimizer_maxiter: 50
+min_data_frac: 0.8
+beta_vol: 1.0
+beta_dd: 1.0
+beta_mom: 0.5
+beta_corr: 0.5
+beta_conc: 0.5

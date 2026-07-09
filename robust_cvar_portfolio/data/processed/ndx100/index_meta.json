@@ -1,0 +1,7 @@
+{
+  "index_name": "ndx100",
+  "benchmark_ticker": "QQQ",
+  "point_in_time_flag": true,
+  "n_union_tickers": 211,
+  "data_source": "unliftedq/index-constitution CSV"
+}

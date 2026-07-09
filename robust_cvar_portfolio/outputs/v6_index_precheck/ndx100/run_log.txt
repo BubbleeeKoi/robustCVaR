@@ -1,0 +1,39 @@
+=== V6 Index NDX100 ===
+  calibrating C_stable on validation...
+=== V6 Index NDX100 ===
+  calibrating C_stable on validation...
+  test backtest: A_ceil_CVaR...
+  finished A_ceil_CVaR in 1.2 min
+  test backtest: B_fixed_kappa...
+  skip test (checkpoint): Index_ETF
+  skip test (checkpoint): Equal_Weight
+  skip test (checkpoint): A_ceil_CVaR
+  test backtest: B_fixed_kappa...
+  finished B_fixed_kappa in 1.4 min
+  test backtest: C_stable...
+  finished B_fixed_kappa in 1.4 min
+  test backtest: C_stable...
+=== V6 Index NDX100 ===
+  skip calibration (selected_params.json exists)
+  skip test (checkpoint): Index_ETF
+  skip test (checkpoint): Equal_Weight
+  skip test (checkpoint): A_ceil_CVaR
+  skip test (checkpoint): B_fixed_kappa
+  test backtest: C_stable...
+  finished C_stable in 48.7 min
+=== V6 Index NDX100 ===
+  skip calibration (selected_params.json exists)
+  skip test (checkpoint): Index_ETF
+  skip test (checkpoint): Equal_Weight
+  skip test (checkpoint): A_ceil_CVaR
+  skip test (checkpoint): B_fixed_kappa
+  skip test (checkpoint): C_stable
+=== V6 Index NDX100 ===
+  skip calibration (selected_params.json exists)
+  skip test (checkpoint): Index_ETF
+  skip test (checkpoint): Equal_Weight
+  skip test (checkpoint): A_ceil_CVaR
+  skip test (checkpoint): B_fixed_kappa
+  skip test (checkpoint): C_stable
+  Done ndx100 in 0.5 min
+  finished C_stable in 45.9 min

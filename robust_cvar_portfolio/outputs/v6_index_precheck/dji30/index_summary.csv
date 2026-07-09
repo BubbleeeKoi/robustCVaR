@@ -1,0 +1,2 @@
+index,elapsed_sec,A_cvar,C_stable_cvar,Index_cvar,delta_C_vs_A,win_C_vs_A,win_C_vs_Index,kappa_max,weight_cap,rho,avg_correlation,pc1_share,d_eff,d_eff_over_N,universe_turnover_mean
+dji30,2573.020595550537,0.024632535030944074,0.023513119897088736,0.030871664831726233,0.0011194151338553386,True,True,0.75,,,0.2859412989054152,0.3783670806284186,6.2164326627978355,0.20721442209326119,0.005864695340501793

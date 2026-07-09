@@ -6,6 +6,9 @@
 本文档对应：
 - **V1** `robust_cvar_portfolio_plan_mathjax.html`（已完成）
 - **V2** `robust_cvar_V2_PLAN.html`（已完成：跨市场 + 消融 + Risk Measure Learning 框架）
+- **V5–V6** 四市场校准 + Equity-Only 个股主线（§13–§14）
+- **V6 指数补充** `V6_2_index_full_run_plan.html`（DJI30/NDX100/SP500 PIT，§16）
+- **V7** `V7_structure_corr_stratified_plan.html`（结构诊断 + 相关性分层 + effdim RCVaR，§15）
 
 **完成状态**
 
@@ -733,4 +736,220 @@ $$
 
 ---
 
-*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；V6 进行中：2026-07-03；环境：`conda activate portfolio` 或直接用 `envs/portfolio/python.exe`*
+## 15. V7：结构诊断、相关性分层 Random30 与有效维度缩放 RCVaR（2026-07-07）
+
+> 计划与结果分析：`V7_structure_corr_stratified_plan.html`（§9 论文写法 + §11 实验结果）  
+> 自动更新：`python -u robust_cvar_portfolio/experiments/update_v7_html_results.py`
+
+### 15.1 动机与模块
+
+V6 已证明 SP30 / Random30 有效、SP100 退化。V7 **不先改模型**，而是补结构证据，再测最小改动高维修正：
+
+$$
+V7 = \text{结构诊断 (A)} + \text{相关性分层 (B)} + \text{过拟合诊断 (C)} + \text{有效维度缩放 RCVaR (D)}
+$$
+
+| 模块 | 脚本 | 是否改模型 |
+|------|------|------------|
+| V7-A | `run_v7_structure_summary.py` | 否 |
+| V7-B | `run_v7_generate_corr_stratified_universes.py` + `run_v7_corr_stratified_backtest.py` | 否 |
+| V7-C | `run_v7_tail_overfit_diagnostics.py` | 否 |
+| V7-D | `run_v7_effdim_rcvar.py --d0 30` | 是（κ 按 d_eff 缩放） |
+
+共享：`v7_common.py`、`configs/v7_common.yaml`；`portfolio/rolling.py` 新增 `effdim_d0` 参数，实现 $a_t=\min(1,\ d_{\mathrm{eff},t}/d_0)$ 缩放 $\kappa_{\max}$。
+
+### 15.2 复现命令
+
+```bash
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_structure_summary.py
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_generate_corr_stratified_universes.py --n-candidates 300 --n-per-group 3
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_corr_stratified_backtest.py --n-per-group 3
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_tail_overfit_diagnostics.py
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v7_effdim_rcvar.py --d0 30
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/update_v7_html_results.py
+```
+
+### 15.3 输出目录
+
+```
+outputs/v7/
+  structure/           # V7-A：universe_structure_summary.csv
+  corr_stratified/     # V7-B：group_summary.csv, results_all.csv
+  overfit/             # V7-C：oos_gap_summary.csv, tail_set_overlap.csv
+  effdim_rcvar/        # V7-D：summary.csv, sp30/sp100/table_main.csv
+  paper_tables/        # table_v7_*.csv
+```
+
+### 15.4 V7-A 结构诊断（已完成）
+
+| Universe | N | Val avg corr | Val d_eff | CVaR A | CVaR C_stable | Gap (C−A) |
+|----------|---|--------------|-----------|--------|---------------|-----------|
+| SP30 | 29 | 0.364 | 5.3 | 2.72% | **2.44%** | **−0.28 pp** |
+| SP100 | 100 | 0.335 | 7.3 | **2.47%** | 2.55% | +0.08 pp |
+| Random30 (n=3) | 30 | 0.306 | — | 2.85% | **2.63%** | **−0.22 pp** |
+
+**要点：** SP100 validation 相关性**低于** SP30，但 C_stable 仍略劣于 A → **不能**用「SP100 相关性更高」解释失败。名义 N=100 而 d_eff≈7，才是高维边界案例的关键。
+
+### 15.5 V7-B 相关性分层（已完成，9 universe，~155 min 续跑 High 组）
+
+候选 300 个 30 股 universe，按 validation avg corr 分 Low / Mid / High 各 3 个：
+
+| 组别 | Mean val corr | WinRate vs A | Mean Δ_A |
+|------|---------------|--------------|----------|
+| Low-Corr | 0.280 | 67% | +0.02 pp |
+| Mid-Corr | 0.334 | 67% | +0.04 pp |
+| **High-Corr** | **0.392** | **100%** | **+0.17 pp** |
+
+**要点：** 原计划「Mid-Corr 最优」**未被支持**；High-Corr 30 股子集改善最大。说明**高相关本身不导致 C_stable 失效**——SP100 失败更可能与 N=100 优化复杂度、权重集中、强 A baseline 有关。
+
+### 15.6 V7-C 过拟合诊断（SP100，已完成）
+
+| 模型 | Mean tail Jaccard | Mean OOS gap | Mean HHI | N_eff |
+|------|-------------------|--------------|----------|-------|
+| A_ceil | 0.029 | −0.46 pp | 0.118 | 48 |
+| C_default | 0.029 | −0.87 pp | 0.075 | 67 |
+| **C_stable** | **0.023** | **−0.23 pp** | 0.071 | **15** |
+
+**要点：** C_stable tail 集合重叠最低（尾部样本更不稳定）；OOS gap 小于 C_default；权重更集中（N_eff≈15），与 V6 HHI 诊断一致。
+
+### 15.7 V7-D 有效维度缩放 RCVaR（已完成，d₀=30，~571 min）
+
+**Test CVaR 5% + Sharpe（同一 V7-D 回测）**
+
+| Dataset | 模型 | CVaR | Sharpe |
+|---------|------|------|--------|
+| SP30 | A_ceil | 2.76% | 0.01 |
+| SP30 | C_stable | 2.61% | **0.32** |
+| SP30 | V7_effdim | 2.91% | 0.16 |
+| SP30 | **V7_effdim_cap** | **2.57%** | 0.11 |
+| SP100 | **A_ceil** | **2.47%** | **0.44** |
+| SP100 | C_default | 2.92% | 0.11 |
+| SP100 | C_stable | 2.51% | 0.03 |
+| SP100 | V7_effdim_cap | 2.52% | 0.03 |
+
+**成功标准检验：**
+
+| 标准 | 结果 |
+|------|------|
+| SP30 不恶化（V7 ≤ C_stable + 0.05 pp） | ✓ V7_effdim_cap 2.57% < C_stable 2.61%（−0.04 pp） |
+| SP100 最低（V7 < C_default） | ✓ 2.52% < 2.92% |
+| SP100 中等（V7 ≤ C_stable） | ≈ 持平（2.52% vs 2.51%） |
+| SP100 强标准（V7 < A） | ✗ 2.52% > 2.47% |
+
+**Sharpe 结论（勿与 CVaR 混写）：**
+
+- 主文 SP30（V6 Table 1）：C_stable Sharpe 0.23 > A 0.11，但 < B 0.31 → **尾部风险优化，非 Sharpe 最大化**
+- V7_effdim_cap：CVaR 最优但 Sharpe **低于** C_stable（0.11 vs 0.32）→ **CVaR–Sharpe 存在权衡**
+- SP100：A Sharpe 0.44 仍为绝对优势；V7 系列 Sharpe ≈ 0
+
+**机制：** 纯 effdim 缩放（无 cap）在两市场 CVaR 均变差；**cap 仍是 SP100 稳定化关键**，effdim 缩放需与 cap 联用。
+
+### 15.8 论文叙事定稿（V6 + V7）
+
+$$
+\boxed{
+\text{状态依赖 RCVaR 在 30 股量级个股池有效；SP100 失败主因是名义维度与有效分散度，而非平均相关性更高。}
+}
+$$
+
+**宜写：**
+
+- 中等规模 30 股池（SP30、Random30、高相关 30 股子集）CVaR 改善稳健
+- SP100 为边界案例：C_stable + cap 修复 C_default，V7_effdim+cap 进一步对齐，但 Historical CVaR (A) 仍为强 baseline
+- 方法优化 CVaR，Sharpe 不是目标；部分设定下 CVaR 改善伴随 Sharpe 下降
+
+**不宜写：**
+
+- 「SP100 因相关性高而失败」
+- 「V7 在 Sharpe 上全面优于 baseline」
+- 「Mid-Corr 组是 C_stable 最优区间」（V7-B 未支持）
+
+### 15.9 工程备注
+
+- V7-B 单 universe ~45–50 min；9 universe 全流程约 7–8 h；支持 `universe_*/done.json` checkpoint 续跑
+- 避免多进程同时写同一 `run_log.txt`（`Tee-Object` 文件锁）
+- `update_v7_html_results.py` 写入 `V7_structure_corr_stratified_plan.html` §9/§10/§11（非单独 V7.html）
+
+---
+
+## 16. V6 完整补充实验：官方指数 Point-in-Time 普适性验证（2026-07-08）
+
+> 计划文件：`V6_2_index_full_run_plan.html`（§13 自动更新实验结果）  
+> 执行脚本：`experiments/run_v6_index_experiments.py`  
+> 自动更新：`experiments/update_v6_2_index_html.py`  
+> 输出：`outputs/v6_index_precheck/{dji30,ndx100,sp500}/`
+
+### 16.1 动机
+
+V6 已在 SP30 / Random30 证明中等规模个股池有效，SP100 为高维边界。本轮在 **V6 主线（C_stable）** 上补充三类官方指数池，检验普适性；**不跑 V7**。
+
+### 16.2 实现要点
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| PIT 成分股 | `data/raw/constituents/*.csv` | 来源 unliftedq/index-constitution |
+| 面板构建 | `data/index_universe.py` | 并集下载价格 + 每期成分过滤 |
+| PIT 滚动 | `portfolio/rolling_pit.py` | 调仓日切换 ticker 集合 |
+| 实验入口 | `experiments/index_common.py` | Val 选参 + 5 模型 Test |
+| 配置 | `configs/dji30.yaml` 等 | benchmark: DIA / QQQ / SPY |
+
+**对比模型（每池）：** Index ETF、1/N、A_ceil、B_fixed、**C_stable（V6 主模型）**
+
+**断点续跑：** `rolling_*.csv` + `selected_params.json`；`done.json` 标记完成。
+
+### 16.3 运行方式
+
+```powershell
+C:\Users\Chen\anaconda3\envs\portfolio\python.exe -u robust_cvar_portfolio/experiments/run_v6_index_experiments.py --index all
+# 单指数：--index dji30 | ndx100 | sp500
+# 续跑：直接重跑（自动跳过已有 checkpoint）
+# 清空重来：--fresh
+```
+
+### 16.4 最终结果（Test 2020–2024，CVaR 5% 越低越好）
+
+| 股票池 | N≈ | C_stable | A_ceil | Index ETF | Δ(A−C) | 赢 A | 赢 Index | C Sharpe | 耗时 |
+|--------|-----|----------|--------|-----------|--------|------|----------|----------|------|
+| **DJI30** | 30 | **2.35%** | 2.46% | 3.09% | +0.11 pp | ✓ | ✓ | 0.07 | ~43 min |
+| **NDX100** | 100 | **3.45%** | 3.46% | 3.77% | +0.01 pp | ✓ | ✓ | 0.39 | ~150 min |
+| **SP500** | 500 | 3.41% | 3.41% | **3.20%** | 0.00 pp | ✗ | ✗ | 0.36 | **~265 min** |
+
+**Val 选参（C_stable）：** DJI30/NDX100/SP500 均为 κ_max=0.75，cap=None，ρ=None。
+
+### 16.5 结构诊断
+
+| 股票池 | d_eff | d_eff/N | AvgCorr | Universe turnover |
+|--------|-------|---------|---------|-------------------|
+| DJI30 | 6.22 | 0.21 | 0.29 | 0.006 |
+| NDX100 | 5.78 | 0.10 | 0.33 | 0.016 |
+| SP500 | 5.98 | 0.10 | 0.33 | 0.007 |
+
+**SP500 求解诊断（`solve_diagnostics.csv`）：** 每期 n_used≈473/505，单次求解 ~72 s，max_weight≈0.002（近等权），tail_sample≈13。
+
+### 16.6 结论与论文写法
+
+$$
+\boxed{
+\text{V6 C\_stable 在官方蓝筹/成长指数池（DJI30、NDX100）上改善尾部 CVaR；在 SP500 高维 PIT 池退化为近等权，未能超越 A 或 SPY，与 SP100 边界结论一致。}
+}
+$$
+
+1. **DJI30 / NDX100：** C_stable CVaR 低于 A 与 Index ETF → 支持「不仅 SP30 构造池有效」。
+2. **NDX100：** CVaR 改善边际小（0.01 pp），但 Sharpe 优于 A（0.39 vs 0.16）→ 可写 tail-risk + 风险收益权衡。
+3. **SP500（完整回测，~4.4 h）：** 高维下优化权重近 1/N（HHI≈0.002），A/B/C/EW 轨迹重合 → **高维 PIT 压力测试失败案例**，非求解中断；Index (SPY) CVaR 最优。
+4. **与 V6 主线一致：** 中等规模有效；高维需 cap/稳定化（SP100 已有 C_cap 经验），PIT 500 股需进一步约束或降维。
+
+### 16.7 图表与文件
+
+```
+outputs/v6_index_precheck/
+  dji30/ ndx100/ sp500/   # table_main.csv, done.json, constituent_log.csv
+  figures/
+    fig_dji30_cvar_bar.png, fig_ndx100_cvar_bar.png
+    fig_structure_deff_ratio.png, fig_cvar_improvement_cross_pool.png
+    fig_dji30_nav_drawdown.png, fig_ndx100_nav_drawdown.png
+```
+
+---
+
+*V1 完成：2026-06-29；V2 完成：2026-07-01；V3 完成：2026-07-01；V4 诊断：2026-07-01；Baseline Audit：2026-07-02；V5 完成：2026-07-03；V6 完成：2026-07-03；V7 完成：2026-07-07；**V6 指数补充实验：2026-07-08**；环境：`conda activate portfolio` 或 `envs/portfolio/python.exe`*

@@ -1,0 +1,7 @@
+{
+  "index_name": "dji30",
+  "benchmark_ticker": "DIA",
+  "point_in_time_flag": true,
+  "n_union_tickers": 42,
+  "data_source": "unliftedq/index-constitution CSV"
+}

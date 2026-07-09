@@ -1,0 +1,18 @@
+{
+  "index": "sp500",
+  "elapsed_sec": 15913.172560453415,
+  "A_cvar": 0.03408271413332619,
+  "C_stable_cvar": 0.03408271413332619,
+  "Index_cvar": 0.032040306622732904,
+  "delta_C_vs_A": 0.0,
+  "win_C_vs_A": false,
+  "win_C_vs_Index": false,
+  "kappa_max": 0.75,
+  "weight_cap": null,
+  "rho": null,
+  "avg_correlation": 0.32654688707089874,
+  "pc1_share": 0.3870365011410497,
+  "d_eff": 5.978628643144187,
+  "d_eff_over_N": 0.09964381071906979,
+  "universe_turnover_mean": 0.006666033426178505
+}

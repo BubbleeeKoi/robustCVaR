@@ -31,6 +31,8 @@ def market_drawdown(returns: pd.DataFrame) -> pd.Series:
 
 
 def avg_correlation(returns: pd.DataFrame, window: int = 20) -> pd.Series:
+    if returns.shape[1] < 2:
+        return pd.Series(0.0, index=returns.index)
     values = []
     arr = returns.values
     for idx in range(len(returns)):

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>V6指数实验完整执行方案：DJI30、NDX100、SP500</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;max-width:1120px;margin:36px auto;padding:0 30px 70px;line-height:1.75;color:#1f2937;background:#fff}
+h1{border-bottom:3px solid #111827;padding-bottom:12px;color:#111827}
+h2{margin-top:38px;border-bottom:1px solid #d1d5db;padding-bottom:7px;color:#111827}
+h3{margin-top:26px;color:#111827}
+table{border-collapse:collapse;width:100%;margin:15px 0 26px;font-size:14px}
+th,td{border:1px solid #d1d5db;padding:9px 10px;vertical-align:top}
+th{background:#f3f4f6;font-weight:700}
+.box{border:1px solid #d1d5db;border-radius:10px;background:#f9fafb;padding:16px 20px;margin:18px 0}
+.ok{background:#ecfdf5;border-color:#10b981}
+.warn{background:#fff7ed;border-color:#fb923c}
+.no{background:#fef2f2;border-color:#ef4444}
+.formula{font-family:"Times New Roman",serif;background:#f3f4f6;border-radius:8px;padding:10px 14px;margin:12px 0;overflow-x:auto}
+code{background:#f3f4f6;border-radius:4px;padding:2px 5px}
+.small{font-size:13px;color:#6b7280}
+.badge{display:inline-block;border-radius:999px;padding:2px 8px;background:#e5e7eb;font-size:12px}
+</style>
+</head>
+<body>
+
+<h1>V6指数实验完整执行方案：DJI30、NDX100、SP500</h1>
+
+<div class="box ok">
+<h3>最终决策</h3>
+<p><strong>正式预实验回退到 V6 主线来跑。</strong></p>
+<div class="formula">
+Main model = V6 / C_stable<br>
+V7 = 不作为本轮主实验，不继续跑完整指数结果
+</div>
+<p>这不是说 V7 完全没用，而是说 V7_effdim_cap 没有成为更好的主模型：它在 SP30 上 CVaR 可能略好，但 Sharpe 下降；在 SP100 上仍未超过 A。因此本轮指数实验应先用 V6 检查普适性。</p>
+</div>
+
+<h2>1. 本轮实验到底跑什么？</h2>
+
+<table>
+<thead>
+<tr><th>指数/股票池</th><th>本轮是否完整回测</th><th>原因</th><th>优先级</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>DJI30</td>
+<td><strong>完整回测</strong></td>
+<td>官方 30 股蓝筹指数，最适合验证 V6 是否不是只在自定义 SP30 上有效。</td>
+<td>最高</td>
+</tr>
+<tr>
+<td>NDX100</td>
+<td><strong>完整回测，若计算可承受</strong></td>
+<td>100 股科技/成长风格股票池，可检验 V6 在高风格集中度股票池中的表现。</td>
+<td>高</td>
+</tr>
+<tr>
+<td>SP500</td>
+<td><strong>完整回测 + 结构诊断</strong></td>
+<td>直接检验 V6 在大规模股票池中的可扩展性；同时记录求解时间、失败率和可行性。</td>
+<td>高</td>
+</tr>
+<tr>
+<td>SP30-Constructed</td>
+<td>保留已有 V6 结果</td>
+<td>作为原始 constructed case study，不作为唯一主证据。</td>
+<td>保留</td>
+</tr>
+</tbody>
+</table>
+
+<h2>2. 是否需要加入指数本身作为对比？</h2>
+
+<div class="box ok">
+<p><strong>需要。</strong> 每个指数股票池都应该加入“指数本身/ETF 代理”作为 benchmark。</p>
+</div>
+
+<table>
+<thead>
+<tr><th>股票池</th><th>推荐指数 benchmark</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>DJI30</td>
+<td>DIA 或 DJIA index return</td>
+<td>比较你的组合是否真的优于直接买指数。</td>
+</tr>
+<tr>
+<td>NDX100</td>
+<td>QQQ 或 Nasdaq-100 index return</td>
+<td>比较你的组合是否优于科技成长指数本身。</td>
+</tr>
+<tr>
+<td>SP500</td>
+<td>SPY 或 S&amp;P 500 index return</td>
+<td>比较你的组合是否优于市场大盘。</td>
+</tr>
+<tr>
+<td>SP30 / Random30</td>
+<td>SPY</td>
+<td>作为市场基准，不是同成分严格基准。</td>
+</tr>
+</tbody>
+</table>
+
+<p>注意：指数本身不是优化模型，但必须出现在表格里。它回答的是经济问题：</p>
+<div class="formula">
+	\text{为什么投资者不直接买指数，而要用你的 RCVaR 组合？}
+</div>
+
+<h2>3. 模型对比还需要加别的吗？</h2>
+
+<p>本轮最低模型集合如下：</p>
+
+<table>
+<thead>
+<tr><th>模型</th><th>是否必须</th><th>作用</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>Index / ETF benchmark</td>
+<td>必须</td>
+<td>直接买指数的基准。</td>
+</tr>
+<tr>
+<td>1/N equal weight</td>
+<td>必须</td>
+<td>组合优化文献中非常重要的简单强基准。</td>
+</tr>
+<tr>
+<td>A_ceil / Historical CVaR</td>
+<td>必须</td>
+<td>你的核心 baseline。</td>
+</tr>
+<tr>
+<td>B_fixed / Fixed RCVaR</td>
+<td>必须</td>
+<td>固定鲁棒强度，与状态依赖模型对比。</td>
+</tr>
+<tr>
+<td>C_stable / V6</td>
+<td>必须</td>
+<td>本文主模型。</td>
+</tr>
+<tr>
+<td>GMV</td>
+<td>建议</td>
+<td>传统风险降低模型，增强文献可比性。</td>
+</tr>
+<tr>
+<td>Risk Parity</td>
+<td>可选</td>
+<td>如果代码方便，可作为风险分散类基准。</td>
+</tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<p><strong>建议最低组合：</strong>Index/ETF + 1/N + A_ceil + B_fixed + C_stable。若时间允许，再加 GMV。</p>
+</div>
+
+<h2>4. 成分股必须 point-in-time</h2>
+
+<p>对 DJI30、NDX100、SP500 都必须这样做：</p>
+
+<ol>
+<li>每个 rebalance date 先获取当时指数成分股。</li>
+<li>只使用当时已经属于指数的股票。</li>
+<li>读取这些股票在训练窗口与持有窗口中的价格。</li>
+<li>不能用最新成分股回填整个历史。</li>
+<li>记录因为缺失、退市、价格不完整而剔除的股票。</li>
+</ol>
+
+<table>
+<thead>
+<tr><th>字段</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td>rebalance_date</td><td>每次调仓日期</td></tr>
+<tr><td>index_name</td><td>DJI30 / NDX100 / SP500</td></tr>
+<tr><td>constituents_at_t</td><td>当时真实成分股列表</td></tr>
+<tr><td>n_constituents_raw</td><td>原始成分股数量</td></tr>
+<tr><td>n_available</td><td>有可用价格数据的股票数量</td></tr>
+<tr><td>n_used</td><td>最终进入优化的股票数量</td></tr>
+<tr><td>dropped_tickers</td><td>被剔除股票及原因</td></tr>
+<tr><td>benchmark_ticker</td><td>DIA / QQQ / SPY 或指数序列</td></tr>
+<tr><td>point_in_time_flag</td><td>是否使用 point-in-time 成分股</td></tr>
+</tbody>
+</table>
+
+<h2>5. 每个结果文件需要记录哪些指标？</h2>
+
+<h3>5.1 回测表现指标</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>含义</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr><td>CVaR 5%</td><td>主风险指标，基于日度 OOS losses</td><td>表格可用小数，例如 0.0244</td></tr>
+<tr><td>VaR 5%</td><td>5% 尾部分位风险</td><td>辅助尾部指标</td></tr>
+<tr><td>Max Drawdown</td><td>最大回撤</td><td>路径风险</td></tr>
+<tr><td>Sharpe</td><td>年化 Sharpe</td><td>说明风险收益权衡</td></tr>
+<tr><td>Ann.Return</td><td>年化收益</td><td>不能只看 CVaR</td></tr>
+<tr><td>Ann.Vol</td><td>年化波动</td><td>用于解释 Sharpe</td></tr>
+<tr><td>Turnover</td><td>平均每次调仓换手</td><td>实施成本代理</td></tr>
+<tr><td>HHI</td><td>权重集中度</td><td>越高越集中</td></tr>
+<tr><td>Effective holdings</td><td>1 / HHI</td><td>有效持仓数</td></tr>
+<tr><td>Max weight</td><td>最大单股权重</td><td>检查是否集中押注</td></tr>
+</tbody>
+</table>
+
+<h3>5.2 结构诊断指标</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>公式/含义</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr><td>AvgCorr</td><td>平均两两相关性</td><td>相关性结构</td></tr>
+<tr><td>PC1Share</td><td>第一主成分解释比例</td><td>共同因子集中度</td></tr>
+<tr><td>d_eff</td><td>(sum lambda)^2 / sum(lambda^2)</td><td>有效风险维度</td></tr>
+<tr><td>d_eff / N</td><td>相对有效维度</td><td>解释高维边界</td></tr>
+<tr><td>Universe turnover</td><td>指数成分变化率</td><td>衡量股票池稳定性</td></tr>
+</tbody>
+</table>
+
+<h2>6. 需要画哪些图？</h2>
+
+<table>
+<thead>
+<tr><th>图号</th><th>图内容</th><th>包含对象</th><th>目的</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>Figure 1</td>
+<td>方法框架图：state → κ(s) → RCVaR → portfolio</td>
+<td>V6 主模型</td>
+<td>说明本文不是 RL，不是收益预测。</td>
+</tr>
+<tr>
+<td>Figure 2</td>
+<td>DJI30 主结果柱状图</td>
+<td>Index、1/N、A、B、C_stable</td>
+<td>看官方 30 股股票池是否有效。</td>
+</tr>
+<tr>
+<td>Figure 3</td>
+<td>NDX100 主结果柱状图</td>
+<td>Index、1/N、A、B、C_stable</td>
+<td>看 100 股科技成长股票池是否有效。</td>
+</tr>
+<tr>
+<td>Figure 4</td>
+<td>SP500 结构诊断与完整回测图</td>
+<td>SP30、DJI30、NDX100、SP500</td>
+<td>展示 N、d_eff、d_eff/N。</td>
+</tr>
+<tr>
+<td>Figure 5</td>
+<td>CVaR improvement 对比图</td>
+<td>SP30、DJI30、NDX100、Random30</td>
+<td>横向比较 C_stable 相对 A 的改善。</td>
+</tr>
+<tr>
+<td>Figure 6</td>
+<td>d_eff/N vs ΔCVaR 散点图</td>
+<td>所有已完整回测股票池</td>
+<td>解释普适性与结构条件的关系。</td>
+</tr>
+<tr>
+<td>Figure 7</td>
+<td>HHI / Effective holdings 图</td>
+<td>各模型</td>
+<td>检查 CVaR 改善是否来自过度集中。</td>
+</tr>
+<tr>
+<td>Figure 8</td>
+<td>NAV + Drawdown 图</td>
+<td>重点股票池：DJI30、NDX100</td>
+<td>展示路径表现和回撤控制。</td>
+</tr>
+</tbody>
+</table>
+
+<h2>7. 跑完后如何判断结果好不好？</h2>
+
+<table>
+<thead>
+<tr><th>结果情况</th><th>判断</th><th>下一步</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>DJI30 和 NDX100 都赢 A / Index</td>
+<td>非常好，说明 V6 有较强普适性</td>
+<td>可把 DJI30 和 NDX100 加入主结果。</td>
+</tr>
+<tr>
+<td>DJI30 赢，NDX100 不赢</td>
+<td>仍然不错，说明 V6 适合中等规模蓝筹池，但在高风格集中池受限</td>
+<td>NDX100 放边界分析。</td>
+</tr>
+<tr>
+<td>DJI30 不赢，NDX100 也不赢</td>
+<td>需要谨慎，SP30 可能存在样本选择问题</td>
+<td>转向结构依赖结论，补 Random30 和改进约束。</td>
+</tr>
+<tr>
+<td>CVaR 赢但 Sharpe 不赢</td>
+<td>可以接受，但必须写成 tail-risk tradeoff</td>
+<td>不要写收益增强，只写尾部风险控制。</td>
+</tr>
+<tr>
+<td>CVaR 和 Sharpe 都不赢</td>
+<td>该股票池上不支持 V6</td>
+<td>检查结构原因，考虑 HHI/sector/PC exposure 稳定化。</td>
+</tr>
+</tbody>
+</table>
+
+<h2>8. 如果结果不好，是否还能改进？</h2>
+
+<div class="box warn">
+<p><strong>可以改进，但不要马上回到 V7_effdim。</strong> V7 的问题是只改 κ 或只做 effective-dimension scaling 不够直接。更合理的改进是从组合可行域和风险结构入手。</p>
+</div>
+
+<table>
+<thead>
+<tr><th>问题</th><th>可能原因</th><th>改进方向</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>高维股票池 CVaR 不好</td>
+<td>权重集中或尾部样本不稳定</td>
+<td>加入 HHI 约束、max weight cap、long-only 更严格约束</td>
+</tr>
+<tr>
+<td>NDX100 Sharpe 差</td>
+<td>科技成长风格共振强</td>
+<td>sector/industry cap 或 PC1 exposure control</td>
+</tr>
+<tr>
+<td>SP500 求解不稳定</td>
+<td>N 太大，tail sample 太少</td>
+<td>记录失败率和求解时间；再做子池、行业分层、factor residual CVaR 或 HHI/sector/PC exposure 约束</td>
+</tr>
+<tr>
+<td>C_stable 比 B_fixed 差</td>
+<td>状态函数过度响应</td>
+<td>重新 validation κ_max、smoothing、cap，不用 test 调参</td>
+</tr>
+<tr>
+<td>组合过度集中</td>
+<td>优化器选择少数尾部样本表现好的股票</td>
+<td>HHI、effective holdings、max weight 限制</td>
+</tr>
+</tbody>
+</table>
+
+<h2>9. 是否回退代码？是否不跑 V7？</h2>
+
+<div class="box ok">
+<p><strong>建议代码层面回退到 V6 主分支。</strong></p>
+<ul>
+<li>本轮完整指数回测只跑 V6 主模型：C_stable。</li>
+<li>V7 相关代码保留，但不要作为默认 pipeline。</li>
+<li>不要删除 V7，因为后面写机制诊断时还会用到已有结果。</li>
+<li>输出目录建议分开：<code>outputs/v6_index_precheck/</code> 和 <code>outputs/v7_diagnostics/</code>。</li>
+</ul>
+</div>
+
+<p>代码逻辑建议：</p>
+
+<table>
+<thead>
+<tr><th>代码模块</th><th>状态</th></tr>
+</thead>
+<tbody>
+<tr><td>V6 optimizer / C_stable</td><td>保留为主函数</td></tr>
+<tr><td>V7_effdim scaling</td><td>关闭默认调用，只作为 optional diagnostic</td></tr>
+<tr><td>point-in-time constituents loader</td><td>新增</td></tr>
+<tr><td>index benchmark loader</td><td>新增</td></tr>
+<tr><td>metrics reporter</td><td>扩展，加入 Index、1/N、HHI、MaxDD、结构指标</td></tr>
+</tbody>
+</table>
+
+
+<h2>10. SP500 直接完整回测的额外记录</h2>
+
+<div class="box warn">
+<p><strong>可以直接跑 SP500 完整结果，但必须额外记录计算稳定性。</strong> 500 维结果如果不好，不一定说明模型完全失败；也可能来自求解难度、尾部样本不足、成分股缺失或权重集中。</p>
+</div>
+
+<table>
+<thead>
+<tr><th>额外字段</th><th>为什么需要</th></tr>
+</thead>
+<tbody>
+<tr><td>solve_status</td><td>记录每期优化是否成功、是否达到容差。</td></tr>
+<tr><td>solve_time</td><td>记录 SP500 是否计算可承受。</td></tr>
+<tr><td>n_used_t</td><td>记录每期实际进入优化的股票数，避免名义 500 但实际少很多。</td></tr>
+<tr><td>constraint_violation</td><td>检查权重和约束是否满足。</td></tr>
+<tr><td>tail_sample_size</td><td>训练窗口 5% 尾部样本数量，解释 CVaR 稳定性。</td></tr>
+<tr><td>top10_weight_sum</td><td>检查是否集中到少数股票。</td></tr>
+<tr><td>sector_weight_sum</td><td>如果有行业数据，检查是否出现行业集中。</td></tr>
+</tbody>
+</table>
+
+<h2>11. 最终执行清单</h2>
+
+<ol>
+<li>回退到 V6 主分支，冻结 C_stable 为主模型。</li>
+<li>新增 point-in-time 成分股读取模块。</li>
+<li>新增指数 benchmark：DIA/DJIA、QQQ/NDX100、SPY/SP500。</li>
+<li>跑 DJI30 完整回测：Index、1/N、A、B、C_stable。</li>
+<li>跑 NDX100 完整回测，若计算不稳定，至少先输出结构诊断。</li>
+<li>SP500 直接跑完整回测，同时输出结构诊断、求解时间、失败率和每期 n_used。</li>
+<li>统一输出指标：CVaR、VaR、MaxDD、Sharpe、Ann.Return、Ann.Vol、Turnover、HHI、Effective holdings、Max weight。</li>
+<li>画主图：DJI30、NDX100、结构诊断、CVaR improvement、HHI、NAV/Drawdown。</li>
+<li>跑完后再判断是否需要 HHI / sector / PC exposure 稳定化。</li>
+</ol>
+
+<h2>12. 最终一句话</h2>
+
+<div class="box ok">
+<p>
+<strong>是，当前应回退到 V6 来做 DJI30、NDX100、SP500 预实验。</strong>
+V7 不作为本轮正式回测模型，因为它没有成为更强主模型。先用 V6 跑出 DJI30、NDX100、SP500 的完整结果，再根据结果判断方法是否具有普适性；若不好，再从分散约束、行业/主成分暴露控制和验证集参数选择方向改进。
+</p>
+</div>
+
+<h2>13. V6 完整补充实验结果（自动更新）</h2>
+<div class="box ok"><p><b>主模型：V6 C_stable。</b> Point-in-time 成分股来源：unliftedq/index-constitution CSV；输出目录：<code>outputs/v6_index_precheck/</code></p></div>
+<h3>DJI30</h3>
+<div class="box warn"><p>非常好：V6 在该指数池具有较强普适性</p><p>耗时：42.9 min；d_eff/N≈0.207</p></div>
+<table><tr><th>模型</th><th>CVaR 5%</th><th>Sharpe</th><th>MaxDD</th><th>Ann.Return</th></tr>
+<tr><td>Index_ETF</td><td>3.09%</td><td>0.39</td><td>37.06%</td><td>8.09%</td></tr>
+<tr><td>Equal_Weight</td><td>3.08%</td><td>0.30</td><td>34.44%</td><td>6.18%</td></tr>
+<tr><td>A_ceil_CVaR</td><td>2.46%</td><td>-0.08</td><td>24.07%</td><td>-1.31%</td></tr>
+<tr><td>B_fixed_kappa</td><td>2.51%</td><td>0.01</td><td>27.86%</td><td>0.14%</td></tr>
+<tr><td>C_stable</td><td>2.35%</td><td>0.07</td><td>22.62%</td><td>1.13%</td></tr>
+</table>
+<h3>NDX100</h3>
+<div class="box warn"><p>非常好：V6 在该指数池具有较强普适性</p><p>耗时：0.5 min；d_eff/N≈0.096</p></div>
+<table><tr><th>模型</th><th>CVaR 5%</th><th>Sharpe</th><th>MaxDD</th><th>Ann.Return</th></tr>
+<tr><td>Index_ETF</td><td>3.77%</td><td>0.73</td><td>35.62%</td><td>18.84%</td></tr>
+<tr><td>Equal_Weight</td><td>3.63%</td><td>0.31</td><td>36.89%</td><td>7.53%</td></tr>
+<tr><td>A_ceil_CVaR</td><td>3.46%</td><td>0.16</td><td>28.14%</td><td>3.56%</td></tr>
+<tr><td>B_fixed_kappa</td><td>3.44%</td><td>0.40</td><td>36.27%</td><td>9.39%</td></tr>
+<tr><td>C_stable</td><td>3.37%</td><td>0.27</td><td>32.22%</td><td>5.98%</td></tr>
+</table>
+<h3>SP500</h3>
+<div class="box warn"><p>需谨慎：该股票池上 C_stable 未显示明确优势</p><p>耗时：265.2 min；d_eff/N≈0.100</p></div>
+<table><tr><th>模型</th><th>CVaR 5%</th><th>Sharpe</th><th>MaxDD</th><th>Ann.Return</th></tr>
+<tr><td>Index_ETF</td><td>3.20%</td><td>0.60</td><td>34.10%</td><td>12.56%</td></tr>
+<tr><td>Equal_Weight</td><td>3.41%</td><td>0.36</td><td>40.20%</td><td>8.20%</td></tr>
+<tr><td>A_ceil_CVaR</td><td>3.41%</td><td>0.36</td><td>40.20%</td><td>8.20%</td></tr>
+<tr><td>B_fixed_kappa</td><td>3.41%</td><td>0.36</td><td>40.20%</td><td>8.20%</td></tr>
+<tr><td>C_stable</td><td>3.41%</td><td>0.36</td><td>40.20%</td><td>8.20%</td></tr>
+</table>
+<h3>横向对比：C_stable vs A（ΔCVaR，pp）</h3><table>
+<tr><th>股票池</th><th>Δ(A−C)</th><th>赢 A</th><th>赢 Index</th></tr>
+<tr><td>DJI30</td><td>0.11</td><td>✓</td><td>✓</td></tr>
+<tr><td>NDX100</td><td>0.01</td><td>✓</td><td>✓</td></tr>
+<tr><td>SP500</td><td>0.00</td><td>✗</td><td>✗</td></tr>
+</table>
+<p>图表：<code>outputs/v6_index_precheck/figures/</code> （DJI30/NDX100 柱状图、结构诊断、CVaR improvement、NAV/Drawdown）</p>
+
+<p class="small">Generated on 2026-07-08 13:29</p>
+
+</body>
+</html>

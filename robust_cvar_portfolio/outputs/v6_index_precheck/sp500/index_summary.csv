@@ -1,0 +1,2 @@
+index,elapsed_sec,A_cvar,C_stable_cvar,Index_cvar,delta_C_vs_A,win_C_vs_A,win_C_vs_Index,kappa_max,weight_cap,rho,avg_correlation,pc1_share,d_eff,d_eff_over_N,universe_turnover_mean
+sp500,15913.172560453415,0.03408271413332619,0.03408271413332619,0.032040306622732904,0.0,False,False,0.75,,,0.32654688707089874,0.3870365011410497,5.978628643144187,0.09964381071906979,0.006666033426178505

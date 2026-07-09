@@ -1,0 +1,7 @@
+{
+  "index_name": "sp500",
+  "benchmark_ticker": "SPY",
+  "point_in_time_flag": true,
+  "n_union_tickers": 716,
+  "data_source": "unliftedq/index-constitution CSV"
+}

@@ -1,0 +1,18 @@
+{
+  "index": "dji30",
+  "elapsed_sec": 2573.020595550537,
+  "A_cvar": 0.024632535030944074,
+  "C_stable_cvar": 0.023513119897088736,
+  "Index_cvar": 0.030871664831726233,
+  "delta_C_vs_A": 0.0011194151338553386,
+  "win_C_vs_A": true,
+  "win_C_vs_Index": true,
+  "kappa_max": 0.75,
+  "weight_cap": null,
+  "rho": null,
+  "avg_correlation": 0.2859412989054152,
+  "pc1_share": 0.3783670806284186,
+  "d_eff": 6.2164326627978355,
+  "d_eff_over_N": 0.20721442209326119,
+  "universe_turnover_mean": 0.005864695340501793
+}
